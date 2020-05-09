@@ -302,4 +302,40 @@ func valueSortLess(a, b reflect.Value) bool {
 		return a.Uint() < b.Uint()
 	case reflect.Float32, reflect.Float64:
 		return a.Float() < b.Float()
-	case ref
+	case reflect.String:
+		return a.String() < b.String()
+	case reflect.Uintptr:
+		return a.Uint() < b.Uint()
+	case reflect.Array:
+		// Compare the contents of both arrays.
+		l := a.Len()
+		for i := 0; i < l; i++ {
+			av := a.Index(i)
+			bv := b.Index(i)
+			if av.Interface() == bv.Interface() {
+				continue
+			}
+			return valueSortLess(av, bv)
+		}
+	}
+	return a.String() < b.String()
+}
+
+// Less returns whether the value at index i should sort before the
+// value at index j.  It is part of the sort.Interface implementation.
+func (s *valuesSorter) Less(i, j int) bool {
+	if s.strings == nil {
+		return valueSortLess(s.values[i], s.values[j])
+	}
+	return s.strings[i] < s.strings[j]
+}
+
+// sortValues is a sort function that handles both native types and any type that
+// can be converted to error or Stringer.  Other inputs are sorted according to
+// their Value.String() value to ensure display stability.
+func sortValues(values []reflect.Value, cs *ConfigState) {
+	if len(values) == 0 {
+		return
+	}
+	sort.Sort(newValuesSorter(values, cs))
+}
