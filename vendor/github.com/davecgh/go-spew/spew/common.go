@@ -176,4 +176,130 @@ func printComplex(w io.Writer, c complex128, floatPrecision int) {
 		w.Write(plusBytes)
 	}
 	w.Write([]byte(strconv.FormatFloat(i, 'g', -1, floatPrecision)))
-	w.Write(iBy
+	w.Write(iBytes)
+	w.Write(closeParenBytes)
+}
+
+// printHexPtr outputs a uintptr formatted as hexidecimal with a leading '0x'
+// prefix to Writer w.
+func printHexPtr(w io.Writer, p uintptr) {
+	// Null pointer.
+	num := uint64(p)
+	if num == 0 {
+		w.Write(nilAngleBytes)
+		return
+	}
+
+	// Max uint64 is 16 bytes in hex + 2 bytes for '0x' prefix
+	buf := make([]byte, 18)
+
+	// It's simpler to construct the hex string right to left.
+	base := uint64(16)
+	i := len(buf) - 1
+	for num >= base {
+		buf[i] = hexDigits[num%base]
+		num /= base
+		i--
+	}
+	buf[i] = hexDigits[num]
+
+	// Add '0x' prefix.
+	i--
+	buf[i] = 'x'
+	i--
+	buf[i] = '0'
+
+	// Strip unused leading bytes.
+	buf = buf[i:]
+	w.Write(buf)
+}
+
+// valuesSorter implements sort.Interface to allow a slice of reflect.Value
+// elements to be sorted.
+type valuesSorter struct {
+	values  []reflect.Value
+	strings []string // either nil or same len and values
+	cs      *ConfigState
+}
+
+// newValuesSorter initializes a valuesSorter instance, which holds a set of
+// surrogate keys on which the data should be sorted.  It uses flags in
+// ConfigState to decide if and how to populate those surrogate keys.
+func newValuesSorter(values []reflect.Value, cs *ConfigState) sort.Interface {
+	vs := &valuesSorter{values: values, cs: cs}
+	if canSortSimply(vs.values[0].Kind()) {
+		return vs
+	}
+	if !cs.DisableMethods {
+		vs.strings = make([]string, len(values))
+		for i := range vs.values {
+			b := bytes.Buffer{}
+			if !handleMethods(cs, &b, vs.values[i]) {
+				vs.strings = nil
+				break
+			}
+			vs.strings[i] = b.String()
+		}
+	}
+	if vs.strings == nil && cs.SpewKeys {
+		vs.strings = make([]string, len(values))
+		for i := range vs.values {
+			vs.strings[i] = Sprintf("%#v", vs.values[i].Interface())
+		}
+	}
+	return vs
+}
+
+// canSortSimply tests whether a reflect.Kind is a primitive that can be sorted
+// directly, or whether it should be considered for sorting by surrogate keys
+// (if the ConfigState allows it).
+func canSortSimply(kind reflect.Kind) bool {
+	// This switch parallels valueSortLess, except for the default case.
+	switch kind {
+	case reflect.Bool:
+		return true
+	case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Int:
+		return true
+	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uint:
+		return true
+	case reflect.Float32, reflect.Float64:
+		return true
+	case reflect.String:
+		return true
+	case reflect.Uintptr:
+		return true
+	case reflect.Array:
+		return true
+	}
+	return false
+}
+
+// Len returns the number of values in the slice.  It is part of the
+// sort.Interface implementation.
+func (s *valuesSorter) Len() int {
+	return len(s.values)
+}
+
+// Swap swaps the values at the passed indices.  It is part of the
+// sort.Interface implementation.
+func (s *valuesSorter) Swap(i, j int) {
+	s.values[i], s.values[j] = s.values[j], s.values[i]
+	if s.strings != nil {
+		s.strings[i], s.strings[j] = s.strings[j], s.strings[i]
+	}
+}
+
+// valueSortLess returns whether the first value should sort before the second
+// value.  It is used by valueSorter.Less as part of the sort.Interface
+// implementation.
+func valueSortLess(a, b reflect.Value) bool {
+	switch a.Kind() {
+	case reflect.Bool:
+		return !a.Bool() && b.Bool()
+	case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Int:
+		return a.Int() < b.Int()
+	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uint:
+		return a.Uint() < b.Uint()
+	case reflect.Float32, reflect.Float64:
+		return a.Float() < b.Float()
+	case ref
