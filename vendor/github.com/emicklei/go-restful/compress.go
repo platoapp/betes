@@ -90,4 +90,34 @@ func wantsCompressedResponse(httpRequest *http.Request) (bool, string) {
 	// use in order of appearance
 	if gi == -1 {
 		return zi != -1, ENCODING_DEFLATE
-	} els
+	} else if zi == -1 {
+		return gi != -1, ENCODING_GZIP
+	} else {
+		if gi < zi {
+			return true, ENCODING_GZIP
+		}
+		return true, ENCODING_DEFLATE
+	}
+}
+
+// NewCompressingResponseWriter create a CompressingResponseWriter for a known encoding = {gzip,deflate}
+func NewCompressingResponseWriter(httpWriter http.ResponseWriter, encoding string) (*CompressingResponseWriter, error) {
+	httpWriter.Header().Set(HEADER_ContentEncoding, encoding)
+	c := new(CompressingResponseWriter)
+	c.writer = httpWriter
+	var err error
+	if ENCODING_GZIP == encoding {
+		w := currentCompressorProvider.AcquireGzipWriter()
+		w.Reset(httpWriter)
+		c.compressor = w
+		c.encoding = ENCODING_GZIP
+	} else if ENCODING_DEFLATE == encoding {
+		w := currentCompressorProvider.AcquireZlibWriter()
+		w.Reset(httpWriter)
+		c.compressor = w
+		c.encoding = ENCODING_DEFLATE
+	} else {
+		return nil, errors.New("Unknown encoding:" + encoding)
+	}
+	return c, err
+}
