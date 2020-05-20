@@ -44,3 +44,12 @@ func init() {
 // It is initialized using a SyncPoolCompessors.
 func CurrentCompressorProvider() CompressorProvider {
 	return currentCompressorProvider
+}
+
+// SetCompressorProvider sets the actual provider of compressors (zlib or gzip).
+func SetCompressorProvider(p CompressorProvider) {
+	if p == nil {
+		panic("cannot set compressor provider to nil")
+	}
+	currentCompressorProvider = p
+}
