@@ -126,4 +126,18 @@ func (p *Parameter) DataFormat(formatName string) *Parameter {
 
 // DefaultValue sets the default value field and returns the receiver
 func (p *Parameter) DefaultValue(stringRepresentation string) *Parameter {
-	p.data.DefaultValue = stringRepresentat
+	p.data.DefaultValue = stringRepresentation
+	return p
+}
+
+// Description sets the description value field and returns the receiver
+func (p *Parameter) Description(doc string) *Parameter {
+	p.data.Description = doc
+	return p
+}
+
+// CollectionFormat sets the collection format for an array type
+func (p *Parameter) CollectionFormat(format CollectionFormat) *Parameter {
+	p.data.CollectionFormat = format.String()
+	return p
+}
