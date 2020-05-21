@@ -106,4 +106,44 @@ func (r Route) matchesContentType(mimeTypes string) bool {
 		return true
 	}
 
-	if len(mimeType
+	if len(mimeTypes) == 0 {
+		// idempotent methods with (most-likely or guaranteed) empty content match missing Content-Type
+		m := r.Method
+		if m == "GET" || m == "HEAD" || m == "OPTIONS" || m == "DELETE" || m == "TRACE" {
+			return true
+		}
+		// proceed with default
+		mimeTypes = MIME_OCTET
+	}
+
+	parts := strings.Split(mimeTypes, ",")
+	for _, each := range parts {
+		var contentType string
+		if strings.Contains(each, ";") {
+			contentType = strings.Split(each, ";")[0]
+		} else {
+			contentType = each
+		}
+		// trim before compare
+		contentType = strings.Trim(contentType, " ")
+		for _, consumeableType := range r.Consumes {
+			if consumeableType == "*/*" || consumeableType == contentType {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Tokenize an URL path using the slash separator ; the result does not have empty tokens
+func tokenizePath(path string) []string {
+	if "/" == path {
+		return []string{}
+	}
+	return strings.Split(strings.Trim(path, "/"), "/")
+}
+
+// for debugging
+func (r Route) String() string {
+	return r.Method + " " + r.Path
+}
