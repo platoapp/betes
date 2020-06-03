@@ -150,4 +150,148 @@ func (p *Parameter) CollectionOf(items *Items, format string) *Parameter {
 	p.Type = "array"
 	p.Items = items
 	p.CollectionFormat = format
-	ret
+	return p
+}
+
+// WithDefault sets the default value on this parameter
+func (p *Parameter) WithDefault(defaultValue interface{}) *Parameter {
+	p.AsOptional() // with default implies optional
+	p.Default = defaultValue
+	return p
+}
+
+// AllowsEmptyValues flags this parameter as being ok with empty values
+func (p *Parameter) AllowsEmptyValues() *Parameter {
+	p.AllowEmptyValue = true
+	return p
+}
+
+// NoEmptyValues flags this parameter as not liking empty values
+func (p *Parameter) NoEmptyValues() *Parameter {
+	p.AllowEmptyValue = false
+	return p
+}
+
+// AsOptional flags this parameter as optional
+func (p *Parameter) AsOptional() *Parameter {
+	p.Required = false
+	return p
+}
+
+// AsRequired flags this parameter as required
+func (p *Parameter) AsRequired() *Parameter {
+	if p.Default != nil { // with a default required makes no sense
+		return p
+	}
+	p.Required = true
+	return p
+}
+
+// WithMaxLength sets a max length value
+func (p *Parameter) WithMaxLength(max int64) *Parameter {
+	p.MaxLength = &max
+	return p
+}
+
+// WithMinLength sets a min length value
+func (p *Parameter) WithMinLength(min int64) *Parameter {
+	p.MinLength = &min
+	return p
+}
+
+// WithPattern sets a pattern value
+func (p *Parameter) WithPattern(pattern string) *Parameter {
+	p.Pattern = pattern
+	return p
+}
+
+// WithMultipleOf sets a multiple of value
+func (p *Parameter) WithMultipleOf(number float64) *Parameter {
+	p.MultipleOf = &number
+	return p
+}
+
+// WithMaximum sets a maximum number value
+func (p *Parameter) WithMaximum(max float64, exclusive bool) *Parameter {
+	p.Maximum = &max
+	p.ExclusiveMaximum = exclusive
+	return p
+}
+
+// WithMinimum sets a minimum number value
+func (p *Parameter) WithMinimum(min float64, exclusive bool) *Parameter {
+	p.Minimum = &min
+	p.ExclusiveMinimum = exclusive
+	return p
+}
+
+// WithEnum sets a the enum values (replace)
+func (p *Parameter) WithEnum(values ...interface{}) *Parameter {
+	p.Enum = append([]interface{}{}, values...)
+	return p
+}
+
+// WithMaxItems sets the max items
+func (p *Parameter) WithMaxItems(size int64) *Parameter {
+	p.MaxItems = &size
+	return p
+}
+
+// WithMinItems sets the min items
+func (p *Parameter) WithMinItems(size int64) *Parameter {
+	p.MinItems = &size
+	return p
+}
+
+// UniqueValues dictates that this array can only have unique items
+func (p *Parameter) UniqueValues() *Parameter {
+	p.UniqueItems = true
+	return p
+}
+
+// AllowDuplicates this array can have duplicates
+func (p *Parameter) AllowDuplicates() *Parameter {
+	p.UniqueItems = false
+	return p
+}
+
+// UnmarshalJSON hydrates this items instance with the data from JSON
+func (p *Parameter) UnmarshalJSON(data []byte) error {
+	if err := json.Unmarshal(data, &p.CommonValidations); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(data, &p.Refable); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(data, &p.SimpleSchema); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(data, &p.VendorExtensible); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(data, &p.ParamProps); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MarshalJSON converts this items object to JSON
+func (p Parameter) MarshalJSON() ([]byte, error) {
+	b1, err := json.Marshal(p.CommonValidations)
+	if err != nil {
+		return nil, err
+	}
+	b2, err := json.Marshal(p.SimpleSchema)
+	if err != nil {
+		return nil, err
+	}
+	b3, err := json.Marshal(p.Refable)
+	if err != nil {
+		return nil, err
+	}
+	b4, err := json.Marshal(p.VendorExtensible)
+	if err != nil {
+		return nil, err
+	}
+	b5, err := json.Marshal(p.ParamProps)
+	
