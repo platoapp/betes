@@ -294,4 +294,8 @@ func (p Parameter) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 	b5, err := json.Marshal(p.ParamProps)
-	
+	if err != nil {
+		return nil, err
+	}
+	return swag.ConcatJSON(b3, b1, b2, b4, b5), nil
+}
