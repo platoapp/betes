@@ -71,4 +71,10 @@ func loadHTTPBytes(timeout time.Duration) func(path string) ([]byte, error) {
 			return nil, err
 		}
 
-		if resp.Statu
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("could not access document at %q [%s] ", path, resp.Status)
+		}
+
+		return ioutil.ReadAll(resp.Body)
+	}
+}
