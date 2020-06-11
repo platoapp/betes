@@ -173,4 +173,16 @@ func FormatUint8(value uint8) string {
 }
 
 // FormatUint16 turns an uint16 into a string
-func FormatUint16(value
+func FormatUint16(value uint16) string {
+	return strconv.FormatUint(uint64(value), 10)
+}
+
+// FormatUint32 turns an uint32 into a string
+func FormatUint32(value uint32) string {
+	return strconv.FormatUint(uint64(value), 10)
+}
+
+// FormatUint64 turns an uint64 into a string
+func FormatUint64(value uint64) string {
+	return strconv.FormatUint(value, 10)
+}
