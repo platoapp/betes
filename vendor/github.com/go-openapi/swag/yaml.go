@@ -84,4 +84,133 @@ func (s *JSONMapSlice) UnmarshalJSON(data []byte) error {
 	s.UnmarshalEasyJSON(&l)
 	return l.Error()
 }
-func (s *JSONMapSlice) UnmarshalEasyJSON(in *jlexer
+func (s *JSONMapSlice) UnmarshalEasyJSON(in *jlexer.Lexer) {
+	if in.IsNull() {
+		in.Skip()
+		return
+	}
+
+	var result JSONMapSlice
+	in.Delim('{')
+	for !in.IsDelim('}') {
+		var mi JSONMapItem
+		mi.UnmarshalEasyJSON(in)
+		result = append(result, mi)
+	}
+	*s = result
+}
+
+type JSONMapItem struct {
+	Key   string
+	Value interface{}
+}
+
+func (s JSONMapItem) MarshalJSON() ([]byte, error) {
+	w := &jwriter.Writer{Flags: jwriter.NilMapAsEmpty | jwriter.NilSliceAsEmpty}
+	s.MarshalEasyJSON(w)
+	return w.BuildBytes()
+}
+
+func (s JSONMapItem) MarshalEasyJSON(w *jwriter.Writer) {
+	w.String(s.Key)
+	w.RawByte(':')
+	w.Raw(WriteJSON(s.Value))
+}
+
+func (s *JSONMapItem) UnmarshalEasyJSON(in *jlexer.Lexer) {
+	key := in.UnsafeString()
+	in.WantColon()
+	value := in.Interface()
+	in.WantComma()
+	s.Key = key
+	s.Value = value
+}
+func (s *JSONMapItem) UnmarshalJSON(data []byte) error {
+	l := jlexer.Lexer{Data: data}
+	s.UnmarshalEasyJSON(&l)
+	return l.Error()
+}
+
+func transformData(input interface{}) (out interface{}, err error) {
+	switch in := input.(type) {
+	case yaml.MapSlice:
+
+		o := make(JSONMapSlice, len(in))
+		for i, mi := range in {
+			var nmi JSONMapItem
+			switch k := mi.Key.(type) {
+			case string:
+				nmi.Key = k
+			case int:
+				nmi.Key = strconv.Itoa(k)
+			default:
+				return nil, fmt.Errorf("types don't match expect map key string or int got: %T", mi.Key)
+			}
+
+			v, err := transformData(mi.Value)
+			if err != nil {
+				return nil, err
+			}
+			nmi.Value = v
+			o[i] = nmi
+		}
+		return o, nil
+	case map[interface{}]interface{}:
+		o := make(JSONMapSlice, 0, len(in))
+		for ke, va := range in {
+			var nmi JSONMapItem
+			switch k := ke.(type) {
+			case string:
+				nmi.Key = k
+			case int:
+				nmi.Key = strconv.Itoa(k)
+			default:
+				return nil, fmt.Errorf("types don't match expect map key string or int got: %T", ke)
+			}
+
+			v, err := transformData(va)
+			if err != nil {
+				return nil, err
+			}
+			nmi.Value = v
+			o = append(o, nmi)
+		}
+		return o, nil
+	case []interface{}:
+		len1 := len(in)
+		o := make([]interface{}, len1)
+		for i := 0; i < len1; i++ {
+			o[i], err = transformData(in[i])
+			if err != nil {
+				return nil, err
+			}
+		}
+		return o, nil
+	}
+	return input, nil
+}
+
+// YAMLDoc loads a yaml document from either http or a file and converts it to json
+func YAMLDoc(path string) (json.RawMessage, error) {
+	yamlDoc, err := YAMLData(path)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := YAMLToJSON(yamlDoc)
+	if err != nil {
+		return nil, err
+	}
+
+	return json.RawMessage(data), nil
+}
+
+// YAMLData loads a yaml document from either http or a file
+func YAMLData(path string) (interface{}, error) {
+	data, err := LoadFromFileOrHTTP(path)
+	if err != nil {
+		return nil, err
+	}
+
+	return BytesToYAMLDoc(data)
+}
