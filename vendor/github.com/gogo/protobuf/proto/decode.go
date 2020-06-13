@@ -388,4 +388,117 @@ type Unmarshaler interface {
 
 // Unmarshal parses the protocol buffer representation in buf and places the
 // decoded result in pb.  If the struct underlying pb does not match
-// th
+// the data in buf, the results can be unpredictable.
+//
+// Unmarshal resets pb before starting to unmarshal, so any
+// existing data in pb is always removed. Use UnmarshalMerge
+// to preserve and append to existing data.
+func Unmarshal(buf []byte, pb Message) error {
+	pb.Reset()
+	return UnmarshalMerge(buf, pb)
+}
+
+// UnmarshalMerge parses the protocol buffer representation in buf and
+// writes the decoded result to pb.  If the struct underlying pb does not match
+// the data in buf, the results can be unpredictable.
+//
+// UnmarshalMerge merges into existing data in pb.
+// Most code should use Unmarshal instead.
+func UnmarshalMerge(buf []byte, pb Message) error {
+	// If the object can unmarshal itself, let it.
+	if u, ok := pb.(Unmarshaler); ok {
+		return u.Unmarshal(buf)
+	}
+	return NewBuffer(buf).Unmarshal(pb)
+}
+
+// DecodeMessage reads a count-delimited message from the Buffer.
+func (p *Buffer) DecodeMessage(pb Message) error {
+	enc, err := p.DecodeRawBytes(false)
+	if err != nil {
+		return err
+	}
+	return NewBuffer(enc).Unmarshal(pb)
+}
+
+// DecodeGroup reads a tag-delimited group from the Buffer.
+func (p *Buffer) DecodeGroup(pb Message) error {
+	typ, base, err := getbase(pb)
+	if err != nil {
+		return err
+	}
+	return p.unmarshalType(typ.Elem(), GetProperties(typ.Elem()), true, base)
+}
+
+// Unmarshal parses the protocol buffer representation in the
+// Buffer and places the decoded result in pb.  If the struct
+// underlying pb does not match the data in the buffer, the results can be
+// unpredictable.
+//
+// Unlike proto.Unmarshal, this does not reset pb before starting to unmarshal.
+func (p *Buffer) Unmarshal(pb Message) error {
+	// If the object can unmarshal itself, let it.
+	if u, ok := pb.(Unmarshaler); ok {
+		err := u.Unmarshal(p.buf[p.index:])
+		p.index = len(p.buf)
+		return err
+	}
+
+	typ, base, err := getbase(pb)
+	if err != nil {
+		return err
+	}
+
+	err = p.unmarshalType(typ.Elem(), GetProperties(typ.Elem()), false, base)
+
+	if collectStats {
+		stats.Decode++
+	}
+
+	return err
+}
+
+// unmarshalType does the work of unmarshaling a structure.
+func (o *Buffer) unmarshalType(st reflect.Type, prop *StructProperties, is_group bool, base structPointer) error {
+	var state errorState
+	required, reqFields := prop.reqCount, uint64(0)
+
+	var err error
+	for err == nil && o.index < len(o.buf) {
+		oi := o.index
+		var u uint64
+		u, err = o.DecodeVarint()
+		if err != nil {
+			break
+		}
+		wire := int(u & 0x7)
+		if wire == WireEndGroup {
+			if is_group {
+				if required > 0 {
+					// Not enough information to determine the exact field.
+					// (See below.)
+					return &RequiredNotSetError{"{Unknown}"}
+				}
+				return nil // input is satisfied
+			}
+			return fmt.Errorf("proto: %s: wiretype end group for non-group", st)
+		}
+		tag := int(u >> 3)
+		if tag <= 0 {
+			return fmt.Errorf("proto: %s: illegal tag %d (wire type %d)", st, tag, wire)
+		}
+		fieldnum, ok := prop.decoderTags.get(tag)
+		if !ok {
+			// Maybe it's an extension?
+			if prop.extendable {
+				if e, eok := structPointer_Interface(base, st).(extensionsBytes); eok {
+					if isExtensionField(e, int32(tag)) {
+						if err = o.skip(st, tag, wire); err == nil {
+							ext := e.GetExtensions()
+							*ext = append(*ext, o.buf[oi:o.index]...)
+						}
+						continue
+					}
+				} else if e, _ := extendable(structPointer_Interface(base, st)); isExtensionField(e, int32(tag)) {
+					if err = o.skip(st, tag, wire); err == nil {
+						extmap := e.extensionsWri
