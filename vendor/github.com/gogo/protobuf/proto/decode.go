@@ -247,4 +247,145 @@ func (p *Buffer) DecodeFixed32() (x uint64, err error) {
 // from the Buffer.
 // This is the format used for the sint64 protocol buffer type.
 func (p *Buffer) DecodeZigzag64() (x uint64, err error) {
-	x, err = p
+	x, err = p.DecodeVarint()
+	if err != nil {
+		return
+	}
+	x = (x >> 1) ^ uint64((int64(x&1)<<63)>>63)
+	return
+}
+
+// DecodeZigzag32 reads a zigzag-encoded 32-bit integer
+// from  the Buffer.
+// This is the format used for the sint32 protocol buffer type.
+func (p *Buffer) DecodeZigzag32() (x uint64, err error) {
+	x, err = p.DecodeVarint()
+	if err != nil {
+		return
+	}
+	x = uint64((uint32(x) >> 1) ^ uint32((int32(x&1)<<31)>>31))
+	return
+}
+
+// These are not ValueDecoders: they produce an array of bytes or a string.
+// bytes, embedded messages
+
+// DecodeRawBytes reads a count-delimited byte buffer from the Buffer.
+// This is the format used for the bytes protocol buffer
+// type and for embedded messages.
+func (p *Buffer) DecodeRawBytes(alloc bool) (buf []byte, err error) {
+	n, err := p.DecodeVarint()
+	if err != nil {
+		return nil, err
+	}
+
+	nb := int(n)
+	if nb < 0 {
+		return nil, fmt.Errorf("proto: bad byte length %d", nb)
+	}
+	end := p.index + nb
+	if end < p.index || end > len(p.buf) {
+		return nil, io.ErrUnexpectedEOF
+	}
+
+	if !alloc {
+		// todo: check if can get more uses of alloc=false
+		buf = p.buf[p.index:end]
+		p.index += nb
+		return
+	}
+
+	buf = make([]byte, nb)
+	copy(buf, p.buf[p.index:])
+	p.index += nb
+	return
+}
+
+// DecodeStringBytes reads an encoded string from the Buffer.
+// This is the format used for the proto2 string type.
+func (p *Buffer) DecodeStringBytes() (s string, err error) {
+	buf, err := p.DecodeRawBytes(false)
+	if err != nil {
+		return
+	}
+	return string(buf), nil
+}
+
+// Skip the next item in the buffer. Its wire type is decoded and presented as an argument.
+// If the protocol buffer has extensions, and the field matches, add it as an extension.
+// Otherwise, if the XXX_unrecognized field exists, append the skipped data there.
+func (o *Buffer) skipAndSave(t reflect.Type, tag, wire int, base structPointer, unrecField field) error {
+	oi := o.index
+
+	err := o.skip(t, tag, wire)
+	if err != nil {
+		return err
+	}
+
+	if !unrecField.IsValid() {
+		return nil
+	}
+
+	ptr := structPointer_Bytes(base, unrecField)
+
+	// Add the skipped field to struct field
+	obuf := o.buf
+
+	o.buf = *ptr
+	o.EncodeVarint(uint64(tag<<3 | wire))
+	*ptr = append(o.buf, obuf[oi:o.index]...)
+
+	o.buf = obuf
+
+	return nil
+}
+
+// Skip the next item in the buffer. Its wire type is decoded and presented as an argument.
+func (o *Buffer) skip(t reflect.Type, tag, wire int) error {
+
+	var u uint64
+	var err error
+
+	switch wire {
+	case WireVarint:
+		_, err = o.DecodeVarint()
+	case WireFixed64:
+		_, err = o.DecodeFixed64()
+	case WireBytes:
+		_, err = o.DecodeRawBytes(false)
+	case WireFixed32:
+		_, err = o.DecodeFixed32()
+	case WireStartGroup:
+		for {
+			u, err = o.DecodeVarint()
+			if err != nil {
+				break
+			}
+			fwire := int(u & 0x7)
+			if fwire == WireEndGroup {
+				break
+			}
+			ftag := int(u >> 3)
+			err = o.skip(t, ftag, fwire)
+			if err != nil {
+				break
+			}
+		}
+	default:
+		err = fmt.Errorf("proto: can't skip unknown wire type %d for %s", wire, t)
+	}
+	return err
+}
+
+// Unmarshaler is the interface representing objects that can
+// unmarshal themselves.  The method should reset the receiver before
+// decoding starts.  The argument points to data that may be
+// overwritten, so implementations should not keep references to the
+// buffer.
+type Unmarshaler interface {
+	Unmarshal([]byte) error
+}
+
+// Unmarshal parses the protocol buffer representation in buf and places the
+// decoded result in pb.  If the struct underlying pb does not match
+// th
