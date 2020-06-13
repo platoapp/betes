@@ -198,4 +198,37 @@ func mergeAny(out, in reflect.Value, viaPtr bool, prop *Properties) {
 			out.Set(reflect.MakeSlice(in.Type(), 0, n))
 		}
 		switch in.Type().Elem().Kind() {
-		case reflect.Bool
+		case reflect.Bool, reflect.Float32, reflect.Float64, reflect.Int32, reflect.Int64,
+			reflect.String, reflect.Uint32, reflect.Uint64:
+			out.Set(reflect.AppendSlice(out, in))
+		default:
+			for i := 0; i < n; i++ {
+				x := reflect.Indirect(reflect.New(in.Type().Elem()))
+				mergeAny(x, in.Index(i), false, nil)
+				out.Set(reflect.Append(out, x))
+			}
+		}
+	case reflect.Struct:
+		mergeStruct(out, in)
+	default:
+		// unknown type, so not a protocol buffer
+		log.Printf("proto: don't know how to copy %v", in)
+	}
+}
+
+func mergeExtension(out, in map[int32]Extension) {
+	for extNum, eIn := range in {
+		eOut := Extension{desc: eIn.desc}
+		if eIn.value != nil {
+			v := reflect.New(reflect.TypeOf(eIn.value)).Elem()
+			mergeAny(v, reflect.ValueOf(eIn.value), false, nil)
+			eOut.value = v.Interface()
+		}
+		if eIn.enc != nil {
+			eOut.enc = make([]byte, len(eIn.enc))
+			copy(eOut.enc, eIn.enc)
+		}
+
+		out[extNum] = eOut
+	}
+}
