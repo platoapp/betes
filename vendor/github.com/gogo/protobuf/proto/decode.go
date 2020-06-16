@@ -635,4 +635,169 @@ func (o *Buffer) dec_proto3_int32(p *Properties, base structPointer) error {
 	if err != nil {
 		return err
 	}
-	word3
+	word32Val_Set(structPointer_Word32Val(base, p.field), uint32(u))
+	return nil
+}
+
+// Decode an int64.
+func (o *Buffer) dec_int64(p *Properties, base structPointer) error {
+	u, err := p.valDec(o)
+	if err != nil {
+		return err
+	}
+	word64_Set(structPointer_Word64(base, p.field), o, u)
+	return nil
+}
+
+func (o *Buffer) dec_proto3_int64(p *Properties, base structPointer) error {
+	u, err := p.valDec(o)
+	if err != nil {
+		return err
+	}
+	word64Val_Set(structPointer_Word64Val(base, p.field), o, u)
+	return nil
+}
+
+// Decode a string.
+func (o *Buffer) dec_string(p *Properties, base structPointer) error {
+	s, err := o.DecodeStringBytes()
+	if err != nil {
+		return err
+	}
+	*structPointer_String(base, p.field) = &s
+	return nil
+}
+
+func (o *Buffer) dec_proto3_string(p *Properties, base structPointer) error {
+	s, err := o.DecodeStringBytes()
+	if err != nil {
+		return err
+	}
+	*structPointer_StringVal(base, p.field) = s
+	return nil
+}
+
+// Decode a slice of bytes ([]byte).
+func (o *Buffer) dec_slice_byte(p *Properties, base structPointer) error {
+	b, err := o.DecodeRawBytes(true)
+	if err != nil {
+		return err
+	}
+	*structPointer_Bytes(base, p.field) = b
+	return nil
+}
+
+// Decode a slice of bools ([]bool).
+func (o *Buffer) dec_slice_bool(p *Properties, base structPointer) error {
+	u, err := p.valDec(o)
+	if err != nil {
+		return err
+	}
+	v := structPointer_BoolSlice(base, p.field)
+	*v = append(*v, u != 0)
+	return nil
+}
+
+// Decode a slice of bools ([]bool) in packed format.
+func (o *Buffer) dec_slice_packed_bool(p *Properties, base structPointer) error {
+	v := structPointer_BoolSlice(base, p.field)
+
+	nn, err := o.DecodeVarint()
+	if err != nil {
+		return err
+	}
+	nb := int(nn) // number of bytes of encoded bools
+	fin := o.index + nb
+	if fin < o.index {
+		return errOverflow
+	}
+
+	y := *v
+	for o.index < fin {
+		u, err := p.valDec(o)
+		if err != nil {
+			return err
+		}
+		y = append(y, u != 0)
+	}
+
+	*v = y
+	return nil
+}
+
+// Decode a slice of int32s ([]int32).
+func (o *Buffer) dec_slice_int32(p *Properties, base structPointer) error {
+	u, err := p.valDec(o)
+	if err != nil {
+		return err
+	}
+	structPointer_Word32Slice(base, p.field).Append(uint32(u))
+	return nil
+}
+
+// Decode a slice of int32s ([]int32) in packed format.
+func (o *Buffer) dec_slice_packed_int32(p *Properties, base structPointer) error {
+	v := structPointer_Word32Slice(base, p.field)
+
+	nn, err := o.DecodeVarint()
+	if err != nil {
+		return err
+	}
+	nb := int(nn) // number of bytes of encoded int32s
+
+	fin := o.index + nb
+	if fin < o.index {
+		return errOverflow
+	}
+	for o.index < fin {
+		u, err := p.valDec(o)
+		if err != nil {
+			return err
+		}
+		v.Append(uint32(u))
+	}
+	return nil
+}
+
+// Decode a slice of int64s ([]int64).
+func (o *Buffer) dec_slice_int64(p *Properties, base structPointer) error {
+	u, err := p.valDec(o)
+	if err != nil {
+		return err
+	}
+
+	structPointer_Word64Slice(base, p.field).Append(u)
+	return nil
+}
+
+// Decode a slice of int64s ([]int64) in packed format.
+func (o *Buffer) dec_slice_packed_int64(p *Properties, base structPointer) error {
+	v := structPointer_Word64Slice(base, p.field)
+
+	nn, err := o.DecodeVarint()
+	if err != nil {
+		return err
+	}
+	nb := int(nn) // number of bytes of encoded int64s
+
+	fin := o.index + nb
+	if fin < o.index {
+		return errOverflow
+	}
+	for o.index < fin {
+		u, err := p.valDec(o)
+		if err != nil {
+			return err
+		}
+		v.Append(u)
+	}
+	return nil
+}
+
+// Decode a slice of strings ([]string).
+func (o *Buffer) dec_slice_string(p *Properties, base structPointer) error {
+	s, err := o.DecodeStringBytes()
+	if err != nil {
+		return err
+	}
+	v := structPoi
