@@ -501,4 +501,138 @@ func (o *Buffer) unmarshalType(st reflect.Type, prop *StructProperties, is_group
 					}
 				} else if e, _ := extendable(structPointer_Interface(base, st)); isExtensionField(e, int32(tag)) {
 					if err = o.skip(st, tag, wire); err == nil {
-						extmap := e.extensionsWri
+						extmap := e.extensionsWrite()
+						ext := extmap[int32(tag)] // may be missing
+						ext.enc = append(ext.enc, o.buf[oi:o.index]...)
+						extmap[int32(tag)] = ext
+					}
+					continue
+				}
+			}
+			// Maybe it's a oneof?
+			if prop.oneofUnmarshaler != nil {
+				m := structPointer_Interface(base, st).(Message)
+				// First return value indicates whether tag is a oneof field.
+				ok, err = prop.oneofUnmarshaler(m, tag, wire, o)
+				if err == ErrInternalBadWireType {
+					// Map the error to something more descriptive.
+					// Do the formatting here to save generated code space.
+					err = fmt.Errorf("bad wiretype for oneof field in %T", m)
+				}
+				if ok {
+					continue
+				}
+			}
+			err = o.skipAndSave(st, tag, wire, base, prop.unrecField)
+			continue
+		}
+		p := prop.Prop[fieldnum]
+
+		if p.dec == nil {
+			fmt.Fprintf(os.Stderr, "proto: no protobuf decoder for %s.%s\n", st, st.Field(fieldnum).Name)
+			continue
+		}
+		dec := p.dec
+		if wire != WireStartGroup && wire != p.WireType {
+			if wire == WireBytes && p.packedDec != nil {
+				// a packable field
+				dec = p.packedDec
+			} else {
+				err = fmt.Errorf("proto: bad wiretype for field %s.%s: got wiretype %d, want %d", st, st.Field(fieldnum).Name, wire, p.WireType)
+				continue
+			}
+		}
+		decErr := dec(o, p, base)
+		if decErr != nil && !state.shouldContinue(decErr, p) {
+			err = decErr
+		}
+		if err == nil && p.Required {
+			// Successfully decoded a required field.
+			if tag <= 64 {
+				// use bitmap for fields 1-64 to catch field reuse.
+				var mask uint64 = 1 << uint64(tag-1)
+				if reqFields&mask == 0 {
+					// new required field
+					reqFields |= mask
+					required--
+				}
+			} else {
+				// This is imprecise. It can be fooled by a required field
+				// with a tag > 64 that is encoded twice; that's very rare.
+				// A fully correct implementation would require allocating
+				// a data structure, which we would like to avoid.
+				required--
+			}
+		}
+	}
+	if err == nil {
+		if is_group {
+			return io.ErrUnexpectedEOF
+		}
+		if state.err != nil {
+			return state.err
+		}
+		if required > 0 {
+			// Not enough information to determine the exact field. If we use extra
+			// CPU, we could determine the field only if the missing required field
+			// has a tag <= 64 and we check reqFields.
+			return &RequiredNotSetError{"{Unknown}"}
+		}
+	}
+	return err
+}
+
+// Individual type decoders
+// For each,
+//	u is the decoded value,
+//	v is a pointer to the field (pointer) in the struct
+
+// Sizes of the pools to allocate inside the Buffer.
+// The goal is modest amortization and allocation
+// on at least 16-byte boundaries.
+const (
+	boolPoolSize   = 16
+	uint32PoolSize = 8
+	uint64PoolSize = 4
+)
+
+// Decode a bool.
+func (o *Buffer) dec_bool(p *Properties, base structPointer) error {
+	u, err := p.valDec(o)
+	if err != nil {
+		return err
+	}
+	if len(o.bools) == 0 {
+		o.bools = make([]bool, boolPoolSize)
+	}
+	o.bools[0] = u != 0
+	*structPointer_Bool(base, p.field) = &o.bools[0]
+	o.bools = o.bools[1:]
+	return nil
+}
+
+func (o *Buffer) dec_proto3_bool(p *Properties, base structPointer) error {
+	u, err := p.valDec(o)
+	if err != nil {
+		return err
+	}
+	*structPointer_BoolVal(base, p.field) = u != 0
+	return nil
+}
+
+// Decode an int32.
+func (o *Buffer) dec_int32(p *Properties, base structPointer) error {
+	u, err := p.valDec(o)
+	if err != nil {
+		return err
+	}
+	word32_Set(structPointer_Word32(base, p.field), o, uint32(u))
+	return nil
+}
+
+func (o *Buffer) dec_proto3_int32(p *Properties, base structPointer) error {
+	u, err := p.valDec(o)
+	if err != nil {
+		return err
+	}
+	word3
