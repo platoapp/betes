@@ -800,4 +800,118 @@ func (o *Buffer) dec_slice_string(p *Properties, base structPointer) error {
 	if err != nil {
 		return err
 	}
-	v := structPoi
+	v := structPointer_StringSlice(base, p.field)
+	*v = append(*v, s)
+	return nil
+}
+
+// Decode a slice of slice of bytes ([][]byte).
+func (o *Buffer) dec_slice_slice_byte(p *Properties, base structPointer) error {
+	b, err := o.DecodeRawBytes(true)
+	if err != nil {
+		return err
+	}
+	v := structPointer_BytesSlice(base, p.field)
+	*v = append(*v, b)
+	return nil
+}
+
+// Decode a map field.
+func (o *Buffer) dec_new_map(p *Properties, base structPointer) error {
+	raw, err := o.DecodeRawBytes(false)
+	if err != nil {
+		return err
+	}
+	oi := o.index       // index at the end of this map entry
+	o.index -= len(raw) // move buffer back to start of map entry
+
+	mptr := structPointer_NewAt(base, p.field, p.mtype) // *map[K]V
+	if mptr.Elem().IsNil() {
+		mptr.Elem().Set(reflect.MakeMap(mptr.Type().Elem()))
+	}
+	v := mptr.Elem() // map[K]V
+
+	// Prepare addressable doubly-indirect placeholders for the key and value types.
+	// See enc_new_map for why.
+	keyptr := reflect.New(reflect.PtrTo(p.mtype.Key())).Elem() // addressable *K
+	keybase := toStructPointer(keyptr.Addr())                  // **K
+
+	var valbase structPointer
+	var valptr reflect.Value
+	switch p.mtype.Elem().Kind() {
+	case reflect.Slice:
+		// []byte
+		var dummy []byte
+		valptr = reflect.ValueOf(&dummy)  // *[]byte
+		valbase = toStructPointer(valptr) // *[]byte
+	case reflect.Ptr:
+		// message; valptr is **Msg; need to allocate the intermediate pointer
+		valptr = reflect.New(reflect.PtrTo(p.mtype.Elem())).Elem() // addressable *V
+		valptr.Set(reflect.New(valptr.Type().Elem()))
+		valbase = toStructPointer(valptr)
+	default:
+		// everything else
+		valptr = reflect.New(reflect.PtrTo(p.mtype.Elem())).Elem() // addressable *V
+		valbase = toStructPointer(valptr.Addr())                   // **V
+	}
+
+	// Decode.
+	// This parses a restricted wire format, namely the encoding of a message
+	// with two fields. See enc_new_map for the format.
+	for o.index < oi {
+		// tagcode for key and value properties are always a single byte
+		// because they have tags 1 and 2.
+		tagcode := o.buf[o.index]
+		o.index++
+		switch tagcode {
+		case p.mkeyprop.tagcode[0]:
+			if err := p.mkeyprop.dec(o, p.mkeyprop, keybase); err != nil {
+				return err
+			}
+		case p.mvalprop.tagcode[0]:
+			if err := p.mvalprop.dec(o, p.mvalprop, valbase); err != nil {
+				return err
+			}
+		default:
+			// TODO: Should we silently skip this instead?
+			return fmt.Errorf("proto: bad map data tag %d", raw[0])
+		}
+	}
+	keyelem, valelem := keyptr.Elem(), valptr.Elem()
+	if !keyelem.IsValid() {
+		keyelem = reflect.Zero(p.mtype.Key())
+	}
+	if !valelem.IsValid() {
+		valelem = reflect.Zero(p.mtype.Elem())
+	}
+
+	v.SetMapIndex(keyelem, valelem)
+	return nil
+}
+
+// Decode a group.
+func (o *Buffer) dec_struct_group(p *Properties, base structPointer) error {
+	bas := structPointer_GetStructPointer(base, p.field)
+	if structPointer_IsNil(bas) {
+		// allocate new nested message
+		bas = toStructPointer(reflect.New(p.stype))
+		structPointer_SetStructPointer(base, p.field, bas)
+	}
+	return o.unmarshalType(p.stype, p.sprop, true, bas)
+}
+
+// Decode an embedded message.
+func (o *Buffer) dec_struct_message(p *Properties, base structPointer) (err error) {
+	raw, e := o.DecodeRawBytes(false)
+	if e != nil {
+		return e
+	}
+
+	bas := structPointer_GetStructPointer(base, p.field)
+	if structPointer_IsNil(bas) {
+		// allocate new nested message
+		bas = toStructPointer(reflect.New(p.stype))
+		structPointer_SetStructPointer(base, p.field, bas)
+	}
+
+	// If the
