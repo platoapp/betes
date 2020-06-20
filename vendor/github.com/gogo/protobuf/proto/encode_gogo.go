@@ -115,4 +115,132 @@ func size_ref_uint32(p *Properties, base structPointer) (n int) {
 	return
 }
 
-// Encode a reference to an i
+// Encode a reference to an int64 pointer.
+func (o *Buffer) enc_ref_int64(p *Properties, base structPointer) error {
+	v := structPointer_Word64Val(base, p.field)
+	x := word64Val_Get(v)
+	o.buf = append(o.buf, p.tagcode...)
+	p.valEnc(o, x)
+	return nil
+}
+
+func size_ref_int64(p *Properties, base structPointer) (n int) {
+	v := structPointer_Word64Val(base, p.field)
+	x := word64Val_Get(v)
+	n += len(p.tagcode)
+	n += p.valSize(x)
+	return
+}
+
+// Encode a reference to a string pointer.
+func (o *Buffer) enc_ref_string(p *Properties, base structPointer) error {
+	v := *structPointer_StringVal(base, p.field)
+	o.buf = append(o.buf, p.tagcode...)
+	o.EncodeStringBytes(v)
+	return nil
+}
+
+func size_ref_string(p *Properties, base structPointer) (n int) {
+	v := *structPointer_StringVal(base, p.field)
+	n += len(p.tagcode)
+	n += sizeStringBytes(v)
+	return
+}
+
+// Encode a reference to a message struct.
+func (o *Buffer) enc_ref_struct_message(p *Properties, base structPointer) error {
+	var state errorState
+	structp := structPointer_GetRefStructPointer(base, p.field)
+	if structPointer_IsNil(structp) {
+		return ErrNil
+	}
+
+	// Can the object marshal itself?
+	if p.isMarshaler {
+		m := structPointer_Interface(structp, p.stype).(Marshaler)
+		data, err := m.Marshal()
+		if err != nil && !state.shouldContinue(err, nil) {
+			return err
+		}
+		o.buf = append(o.buf, p.tagcode...)
+		o.EncodeRawBytes(data)
+		return nil
+	}
+
+	o.buf = append(o.buf, p.tagcode...)
+	return o.enc_len_struct(p.sprop, structp, &state)
+}
+
+//TODO this is only copied, please fix this
+func size_ref_struct_message(p *Properties, base structPointer) int {
+	structp := structPointer_GetRefStructPointer(base, p.field)
+	if structPointer_IsNil(structp) {
+		return 0
+	}
+
+	// Can the object marshal itself?
+	if p.isMarshaler {
+		m := structPointer_Interface(structp, p.stype).(Marshaler)
+		data, _ := m.Marshal()
+		n0 := len(p.tagcode)
+		n1 := sizeRawBytes(data)
+		return n0 + n1
+	}
+
+	n0 := len(p.tagcode)
+	n1 := size_struct(p.sprop, structp)
+	n2 := sizeVarint(uint64(n1)) // size of encoded length
+	return n0 + n1 + n2
+}
+
+// Encode a slice of references to message struct pointers ([]struct).
+func (o *Buffer) enc_slice_ref_struct_message(p *Properties, base structPointer) error {
+	var state errorState
+	ss := structPointer_StructRefSlice(base, p.field, p.stype.Size())
+	l := ss.Len()
+	for i := 0; i < l; i++ {
+		structp := ss.Index(i)
+		if structPointer_IsNil(structp) {
+			return errRepeatedHasNil
+		}
+
+		// Can the object marshal itself?
+		if p.isMarshaler {
+			m := structPointer_Interface(structp, p.stype).(Marshaler)
+			data, err := m.Marshal()
+			if err != nil && !state.shouldContinue(err, nil) {
+				return err
+			}
+			o.buf = append(o.buf, p.tagcode...)
+			o.EncodeRawBytes(data)
+			continue
+		}
+
+		o.buf = append(o.buf, p.tagcode...)
+		err := o.enc_len_struct(p.sprop, structp, &state)
+		if err != nil && !state.shouldContinue(err, nil) {
+			if err == ErrNil {
+				return errRepeatedHasNil
+			}
+			return err
+		}
+
+	}
+	return state.err
+}
+
+//TODO this is only copied, please fix this
+func size_slice_ref_struct_message(p *Properties, base structPointer) (n int) {
+	ss := structPointer_StructRefSlice(base, p.field, p.stype.Size())
+	l := ss.Len()
+	n += l * len(p.tagcode)
+	for i := 0; i < l; i++ {
+		structp := ss.Index(i)
+		if structPointer_IsNil(structp) {
+			return // return the size up to this point
+		}
+
+		// Can the object marshal itself?
+		if p.isMarshaler {
+			m := structPointer_Interface(structp, p.stype).(Marshaler)
+			data, _ 
