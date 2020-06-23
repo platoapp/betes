@@ -243,4 +243,108 @@ func size_slice_ref_struct_message(p *Properties, base structPointer) (n int) {
 		// Can the object marshal itself?
 		if p.isMarshaler {
 			m := structPointer_Interface(structp, p.stype).(Marshaler)
-			data, _ 
+			data, _ := m.Marshal()
+			n += len(p.tagcode)
+			n += sizeRawBytes(data)
+			continue
+		}
+
+		n0 := size_struct(p.sprop, structp)
+		n1 := sizeVarint(uint64(n0)) // size of encoded length
+		n += n0 + n1
+	}
+	return
+}
+
+func (o *Buffer) enc_custom_bytes(p *Properties, base structPointer) error {
+	i := structPointer_InterfaceRef(base, p.field, p.ctype)
+	if i == nil {
+		return ErrNil
+	}
+	custom := i.(Marshaler)
+	data, err := custom.Marshal()
+	if err != nil {
+		return err
+	}
+	if data == nil {
+		return ErrNil
+	}
+	o.buf = append(o.buf, p.tagcode...)
+	o.EncodeRawBytes(data)
+	return nil
+}
+
+func size_custom_bytes(p *Properties, base structPointer) (n int) {
+	n += len(p.tagcode)
+	i := structPointer_InterfaceRef(base, p.field, p.ctype)
+	if i == nil {
+		return 0
+	}
+	custom := i.(Marshaler)
+	data, _ := custom.Marshal()
+	n += sizeRawBytes(data)
+	return
+}
+
+func (o *Buffer) enc_custom_ref_bytes(p *Properties, base structPointer) error {
+	custom := structPointer_InterfaceAt(base, p.field, p.ctype).(Marshaler)
+	data, err := custom.Marshal()
+	if err != nil {
+		return err
+	}
+	if data == nil {
+		return ErrNil
+	}
+	o.buf = append(o.buf, p.tagcode...)
+	o.EncodeRawBytes(data)
+	return nil
+}
+
+func size_custom_ref_bytes(p *Properties, base structPointer) (n int) {
+	n += len(p.tagcode)
+	i := structPointer_InterfaceAt(base, p.field, p.ctype)
+	if i == nil {
+		return 0
+	}
+	custom := i.(Marshaler)
+	data, _ := custom.Marshal()
+	n += sizeRawBytes(data)
+	return
+}
+
+func (o *Buffer) enc_custom_slice_bytes(p *Properties, base structPointer) error {
+	inter := structPointer_InterfaceRef(base, p.field, p.ctype)
+	if inter == nil {
+		return ErrNil
+	}
+	slice := reflect.ValueOf(inter)
+	l := slice.Len()
+	for i := 0; i < l; i++ {
+		v := slice.Index(i)
+		custom := v.Interface().(Marshaler)
+		data, err := custom.Marshal()
+		if err != nil {
+			return err
+		}
+		o.buf = append(o.buf, p.tagcode...)
+		o.EncodeRawBytes(data)
+	}
+	return nil
+}
+
+func size_custom_slice_bytes(p *Properties, base structPointer) (n int) {
+	inter := structPointer_InterfaceRef(base, p.field, p.ctype)
+	if inter == nil {
+		return 0
+	}
+	slice := reflect.ValueOf(inter)
+	l := slice.Len()
+	n += l * len(p.tagcode)
+	for i := 0; i < l; i++ {
+		v := slice.Index(i)
+		custom := v.Interface().(Marshaler)
+		data, _ := custom.Marshal()
+		n += sizeRawBytes(data)
+	}
+	return
+}
