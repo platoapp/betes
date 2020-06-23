@@ -174,3 +174,122 @@ func size(buf []byte, wire int) (int, error) {
 			}
 			offset += s
 		}
+	}
+	return 0, fmt.Errorf("proto: can't get size for unknown wire type %d", wire)
+}
+
+func BytesToExtensionsMap(buf []byte) (map[int32]Extension, error) {
+	m := make(map[int32]Extension)
+	i := 0
+	for i < len(buf) {
+		tag, n := DecodeVarint(buf[i:])
+		if n <= 0 {
+			return nil, fmt.Errorf("unable to decode varint")
+		}
+		fieldNum := int32(tag >> 3)
+		wireType := int(tag & 0x7)
+		l, err := size(buf[i+n:], wireType)
+		if err != nil {
+			return nil, err
+		}
+		end := i + int(l) + n
+		m[int32(fieldNum)] = Extension{enc: buf[i:end]}
+		i = end
+	}
+	return m, nil
+}
+
+func NewExtension(e []byte) Extension {
+	ee := Extension{enc: make([]byte, len(e))}
+	copy(ee.enc, e)
+	return ee
+}
+
+func AppendExtension(e Message, tag int32, buf []byte) {
+	if ee, eok := e.(extensionsBytes); eok {
+		ext := ee.GetExtensions()
+		*ext = append(*ext, buf...)
+		return
+	}
+	if ee, eok := e.(extendableProto); eok {
+		m := ee.extensionsWrite()
+		ext := m[int32(tag)] // may be missing
+		ext.enc = append(ext.enc, buf...)
+		m[int32(tag)] = ext
+	}
+}
+
+func encodeExtension(e *Extension) error {
+	if e.value == nil || e.desc == nil {
+		// Extension is only in its encoded form.
+		return nil
+	}
+	// We don't skip extensions that have an encoded form set,
+	// because the extension value may have been mutated after
+	// the last time this function was called.
+
+	et := reflect.TypeOf(e.desc.ExtensionType)
+	props := extensionProperties(e.desc)
+
+	p := NewBuffer(nil)
+	// If e.value has type T, the encoder expects a *struct{ X T }.
+	// Pass a *T with a zero field and hope it all works out.
+	x := reflect.New(et)
+	x.Elem().Set(reflect.ValueOf(e.value))
+	if err := props.enc(p, props, toStructPointer(x)); err != nil {
+		return err
+	}
+	e.enc = p.buf
+	return nil
+}
+
+func (this Extension) GoString() string {
+	if this.enc == nil {
+		if err := encodeExtension(&this); err != nil {
+			panic(err)
+		}
+	}
+	return fmt.Sprintf("proto.NewExtension(%#v)", this.enc)
+}
+
+func SetUnsafeExtension(pb Message, fieldNum int32, value interface{}) error {
+	typ := reflect.TypeOf(pb).Elem()
+	ext, ok := extensionMaps[typ]
+	if !ok {
+		return fmt.Errorf("proto: bad extended type; %s is not extendable", typ.String())
+	}
+	desc, ok := ext[fieldNum]
+	if !ok {
+		return errors.New("proto: bad extension number; not in declared ranges")
+	}
+	return SetExtension(pb, desc, value)
+}
+
+func GetUnsafeExtension(pb Message, fieldNum int32) (interface{}, error) {
+	typ := reflect.TypeOf(pb).Elem()
+	ext, ok := extensionMaps[typ]
+	if !ok {
+		return nil, fmt.Errorf("proto: bad extended type; %s is not extendable", typ.String())
+	}
+	desc, ok := ext[fieldNum]
+	if !ok {
+		return nil, fmt.Errorf("unregistered field number %d", fieldNum)
+	}
+	return GetExtension(pb, desc)
+}
+
+func NewUnsafeXXX_InternalExtensions(m map[int32]Extension) XXX_InternalExtensions {
+	x := &XXX_InternalExtensions{
+		p: new(struct {
+			mu           sync.Mutex
+			extensionMap map[int32]Extension
+		}),
+	}
+	x.p.extensionMap = m
+	return *x
+}
+
+func GetUnsafeExtensionsMap(extendable Message) map[int32]Extension {
+	pb := extendable.(extendableProto)
+	return pb.extensionsWrite()
+}
