@@ -101,4 +101,104 @@ func structPointer_ifield(p structPointer, f field) interface{} {
 
 // Bytes returns the address of a []byte field in the struct.
 func structPointer_Bytes(p structPointer, f field) *[]byte {
-	return structPointer_ifi
+	return structPointer_ifield(p, f).(*[]byte)
+}
+
+// BytesSlice returns the address of a [][]byte field in the struct.
+func structPointer_BytesSlice(p structPointer, f field) *[][]byte {
+	return structPointer_ifield(p, f).(*[][]byte)
+}
+
+// Bool returns the address of a *bool field in the struct.
+func structPointer_Bool(p structPointer, f field) **bool {
+	return structPointer_ifield(p, f).(**bool)
+}
+
+// BoolVal returns the address of a bool field in the struct.
+func structPointer_BoolVal(p structPointer, f field) *bool {
+	return structPointer_ifield(p, f).(*bool)
+}
+
+// BoolSlice returns the address of a []bool field in the struct.
+func structPointer_BoolSlice(p structPointer, f field) *[]bool {
+	return structPointer_ifield(p, f).(*[]bool)
+}
+
+// String returns the address of a *string field in the struct.
+func structPointer_String(p structPointer, f field) **string {
+	return structPointer_ifield(p, f).(**string)
+}
+
+// StringVal returns the address of a string field in the struct.
+func structPointer_StringVal(p structPointer, f field) *string {
+	return structPointer_ifield(p, f).(*string)
+}
+
+// StringSlice returns the address of a []string field in the struct.
+func structPointer_StringSlice(p structPointer, f field) *[]string {
+	return structPointer_ifield(p, f).(*[]string)
+}
+
+// Extensions returns the address of an extension map field in the struct.
+func structPointer_Extensions(p structPointer, f field) *XXX_InternalExtensions {
+	return structPointer_ifield(p, f).(*XXX_InternalExtensions)
+}
+
+// ExtMap returns the address of an extension map field in the struct.
+func structPointer_ExtMap(p structPointer, f field) *map[int32]Extension {
+	return structPointer_ifield(p, f).(*map[int32]Extension)
+}
+
+// NewAt returns the reflect.Value for a pointer to a field in the struct.
+func structPointer_NewAt(p structPointer, f field, typ reflect.Type) reflect.Value {
+	return structPointer_field(p, f).Addr()
+}
+
+// SetStructPointer writes a *struct field in the struct.
+func structPointer_SetStructPointer(p structPointer, f field, q structPointer) {
+	structPointer_field(p, f).Set(q.v)
+}
+
+// GetStructPointer reads a *struct field in the struct.
+func structPointer_GetStructPointer(p structPointer, f field) structPointer {
+	return structPointer{structPointer_field(p, f)}
+}
+
+// StructPointerSlice the address of a []*struct field in the struct.
+func structPointer_StructPointerSlice(p structPointer, f field) structPointerSlice {
+	return structPointerSlice{structPointer_field(p, f)}
+}
+
+// A structPointerSlice represents the address of a slice of pointers to structs
+// (themselves messages or groups). That is, v.Type() is *[]*struct{...}.
+type structPointerSlice struct {
+	v reflect.Value
+}
+
+func (p structPointerSlice) Len() int                  { return p.v.Len() }
+func (p structPointerSlice) Index(i int) structPointer { return structPointer{p.v.Index(i)} }
+func (p structPointerSlice) Append(q structPointer) {
+	p.v.Set(reflect.Append(p.v, q.v))
+}
+
+var (
+	int32Type   = reflect.TypeOf(int32(0))
+	uint32Type  = reflect.TypeOf(uint32(0))
+	float32Type = reflect.TypeOf(float32(0))
+	int64Type   = reflect.TypeOf(int64(0))
+	uint64Type  = reflect.TypeOf(uint64(0))
+	float64Type = reflect.TypeOf(float64(0))
+)
+
+// A word32 represents a field of type *int32, *uint32, *float32, or *enum.
+// That is, v.Type() is *int32, *uint32, *float32, or *enum and v is assignable.
+type word32 struct {
+	v reflect.Value
+}
+
+// IsNil reports whether p is nil.
+func word32_IsNil(p word32) bool {
+	return p.v.IsNil()
+}
+
+// 
