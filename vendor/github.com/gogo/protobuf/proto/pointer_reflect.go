@@ -340,4 +340,145 @@ func (p word32Slice) Index(i int) uint32 {
 	panic("unreachable")
 }
 
-// Word32Slice returns a refe
+// Word32Slice returns a reference to a []int32, []uint32, []float32, or []enum field in the struct.
+func structPointer_Word32Slice(p structPointer, f field) word32Slice {
+	return word32Slice{structPointer_field(p, f)}
+}
+
+// word64 is like word32 but for 64-bit values.
+type word64 struct {
+	v reflect.Value
+}
+
+func word64_Set(p word64, o *Buffer, x uint64) {
+	t := p.v.Type().Elem()
+	switch t {
+	case int64Type:
+		if len(o.int64s) == 0 {
+			o.int64s = make([]int64, uint64PoolSize)
+		}
+		o.int64s[0] = int64(x)
+		p.v.Set(reflect.ValueOf(&o.int64s[0]))
+		o.int64s = o.int64s[1:]
+		return
+	case uint64Type:
+		if len(o.uint64s) == 0 {
+			o.uint64s = make([]uint64, uint64PoolSize)
+		}
+		o.uint64s[0] = x
+		p.v.Set(reflect.ValueOf(&o.uint64s[0]))
+		o.uint64s = o.uint64s[1:]
+		return
+	case float64Type:
+		if len(o.float64s) == 0 {
+			o.float64s = make([]float64, uint64PoolSize)
+		}
+		o.float64s[0] = math.Float64frombits(x)
+		p.v.Set(reflect.ValueOf(&o.float64s[0]))
+		o.float64s = o.float64s[1:]
+		return
+	}
+	panic("unreachable")
+}
+
+func word64_IsNil(p word64) bool {
+	return p.v.IsNil()
+}
+
+func word64_Get(p word64) uint64 {
+	elem := p.v.Elem()
+	switch elem.Kind() {
+	case reflect.Int64:
+		return uint64(elem.Int())
+	case reflect.Uint64:
+		return elem.Uint()
+	case reflect.Float64:
+		return math.Float64bits(elem.Float())
+	}
+	panic("unreachable")
+}
+
+func structPointer_Word64(p structPointer, f field) word64 {
+	return word64{structPointer_field(p, f)}
+}
+
+// word64Val is like word32Val but for 64-bit values.
+type word64Val struct {
+	v reflect.Value
+}
+
+func word64Val_Set(p word64Val, o *Buffer, x uint64) {
+	switch p.v.Type() {
+	case int64Type:
+		p.v.SetInt(int64(x))
+		return
+	case uint64Type:
+		p.v.SetUint(x)
+		return
+	case float64Type:
+		p.v.SetFloat(math.Float64frombits(x))
+		return
+	}
+	panic("unreachable")
+}
+
+func word64Val_Get(p word64Val) uint64 {
+	elem := p.v
+	switch elem.Kind() {
+	case reflect.Int64:
+		return uint64(elem.Int())
+	case reflect.Uint64:
+		return elem.Uint()
+	case reflect.Float64:
+		return math.Float64bits(elem.Float())
+	}
+	panic("unreachable")
+}
+
+func structPointer_Word64Val(p structPointer, f field) word64Val {
+	return word64Val{structPointer_field(p, f)}
+}
+
+type word64Slice struct {
+	v reflect.Value
+}
+
+func (p word64Slice) Append(x uint64) {
+	n, m := p.v.Len(), p.v.Cap()
+	if n < m {
+		p.v.SetLen(n + 1)
+	} else {
+		t := p.v.Type().Elem()
+		p.v.Set(reflect.Append(p.v, reflect.Zero(t)))
+	}
+	elem := p.v.Index(n)
+	switch elem.Kind() {
+	case reflect.Int64:
+		elem.SetInt(int64(int64(x)))
+	case reflect.Uint64:
+		elem.SetUint(uint64(x))
+	case reflect.Float64:
+		elem.SetFloat(float64(math.Float64frombits(x)))
+	}
+}
+
+func (p word64Slice) Len() int {
+	return p.v.Len()
+}
+
+func (p word64Slice) Index(i int) uint64 {
+	elem := p.v.Index(i)
+	switch elem.Kind() {
+	case reflect.Int64:
+		return uint64(elem.Int())
+	case reflect.Uint64:
+		return uint64(elem.Uint())
+	case reflect.Float64:
+		return math.Float64bits(float64(elem.Float()))
+	}
+	panic("unreachable")
+}
+
+func structPointer_Word64Slice(p structPointer, f field) word64Slice {
+	return word64Slice{structPointer_field(p, f)}
+}
