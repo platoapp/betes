@@ -72,4 +72,152 @@ type Message struct {
 	ShortKey     []int32                          `protobuf:"varint,19,rep,packed,name=short_key,json=shortKey" json:"short_key,omitempty"`
 	Nested       *Nested                          `protobuf:"bytes,6,opt,name=nested" json:"nested,omitempty"`
 	RFunny       []Message_Humour                 `protobuf:"varint,16,rep,packed,name=r_funny,json=rFunny,enum=proto3_proto.Message_Humour" json:"r_funny,omitempty"`
-	Terrain
+	Terrain      map[string]*Nested               `protobuf:"bytes,10,rep,name=terrain" json:"terrain,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
+	Proto2Field  *testdata.SubDefaults            `protobuf:"bytes,11,opt,name=proto2_field,json=proto2Field" json:"proto2_field,omitempty"`
+	Proto2Value  map[string]*testdata.SubDefaults `protobuf:"bytes,13,rep,name=proto2_value,json=proto2Value" json:"proto2_value,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
+	Anything     *google_protobuf.Any             `protobuf:"bytes,14,opt,name=anything" json:"anything,omitempty"`
+	ManyThings   []*google_protobuf.Any           `protobuf:"bytes,15,rep,name=many_things,json=manyThings" json:"many_things,omitempty"`
+	Submessage   *Message                         `protobuf:"bytes,17,opt,name=submessage" json:"submessage,omitempty"`
+	Children     []*Message                       `protobuf:"bytes,18,rep,name=children" json:"children,omitempty"`
+}
+
+func (m *Message) Reset()                    { *m = Message{} }
+func (m *Message) String() string            { return proto.CompactTextString(m) }
+func (*Message) ProtoMessage()               {}
+func (*Message) Descriptor() ([]byte, []int) { return fileDescriptorProto3, []int{0} }
+
+func (m *Message) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+func (m *Message) GetHilarity() Message_Humour {
+	if m != nil {
+		return m.Hilarity
+	}
+	return Message_UNKNOWN
+}
+
+func (m *Message) GetHeightInCm() uint32 {
+	if m != nil {
+		return m.HeightInCm
+	}
+	return 0
+}
+
+func (m *Message) GetData() []byte {
+	if m != nil {
+		return m.Data
+	}
+	return nil
+}
+
+func (m *Message) GetResultCount() int64 {
+	if m != nil {
+		return m.ResultCount
+	}
+	return 0
+}
+
+func (m *Message) GetTrueScotsman() bool {
+	if m != nil {
+		return m.TrueScotsman
+	}
+	return false
+}
+
+func (m *Message) GetScore() float32 {
+	if m != nil {
+		return m.Score
+	}
+	return 0
+}
+
+func (m *Message) GetKey() []uint64 {
+	if m != nil {
+		return m.Key
+	}
+	return nil
+}
+
+func (m *Message) GetShortKey() []int32 {
+	if m != nil {
+		return m.ShortKey
+	}
+	return nil
+}
+
+func (m *Message) GetNested() *Nested {
+	if m != nil {
+		return m.Nested
+	}
+	return nil
+}
+
+func (m *Message) GetRFunny() []Message_Humour {
+	if m != nil {
+		return m.RFunny
+	}
+	return nil
+}
+
+func (m *Message) GetTerrain() map[string]*Nested {
+	if m != nil {
+		return m.Terrain
+	}
+	return nil
+}
+
+func (m *Message) GetProto2Field() *testdata.SubDefaults {
+	if m != nil {
+		return m.Proto2Field
+	}
+	return nil
+}
+
+func (m *Message) GetProto2Value() map[string]*testdata.SubDefaults {
+	if m != nil {
+		return m.Proto2Value
+	}
+	return nil
+}
+
+func (m *Message) GetAnything() *google_protobuf.Any {
+	if m != nil {
+		return m.Anything
+	}
+	return nil
+}
+
+func (m *Message) GetManyThings() []*google_protobuf.Any {
+	if m != nil {
+		return m.ManyThings
+	}
+	return nil
+}
+
+func (m *Message) GetSubmessage() *Message {
+	if m != nil {
+		return m.Submessage
+	}
+	return nil
+}
+
+func (m *Message) GetChildren() []*Message {
+	if m != nil {
+		return m.Children
+	}
+	return nil
+}
+
+type Nested struct {
+	Bunny string `protobuf:"bytes,1,opt,name=bunny,proto3" json:"bunny,omitempty"`
+	Cute  bool   `protobuf:"varint,2,opt,name=cute,proto3" json:"cute,omitempty"`
+}
+
+func (m *Nested) Reset()                    { *m = Nested{} }
+func (m *Nested) String() string            { return proto.CompactTextString(m) }
+func (*Nested) ProtoMessage()               {}
+func (*Nested) Descriptor() ([]byte, []int) { return fileDescriptor
