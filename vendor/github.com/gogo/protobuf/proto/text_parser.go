@@ -31,4 +31,171 @@
 // LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
 // DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
 // THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR 
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+package proto
+
+// Functions for parsing the Text protocol buffer format.
+// TODO: message sets.
+
+import (
+	"encoding"
+	"errors"
+	"fmt"
+	"reflect"
+	"strconv"
+	"strings"
+	"time"
+	"unicode/utf8"
+)
+
+// Error string emitted when deserializing Any and fields are already set
+const anyRepeatedlyUnpacked = "Any message unpacked multiple times, or %q already set"
+
+type ParseError struct {
+	Message string
+	Line    int // 1-based line number
+	Offset  int // 0-based byte offset from start of input
+}
+
+func (p *ParseError) Error() string {
+	if p.Line == 1 {
+		// show offset only for first line
+		return fmt.Sprintf("line 1.%d: %v", p.Offset, p.Message)
+	}
+	return fmt.Sprintf("line %d: %v", p.Line, p.Message)
+}
+
+type token struct {
+	value    string
+	err      *ParseError
+	line     int    // line number
+	offset   int    // byte number from start of input, not start of line
+	unquoted string // the unquoted version of value, if it was a quoted string
+}
+
+func (t *token) String() string {
+	if t.err == nil {
+		return fmt.Sprintf("%q (line=%d, offset=%d)", t.value, t.line, t.offset)
+	}
+	return fmt.Sprintf("parse error: %v", t.err)
+}
+
+type textParser struct {
+	s            string // remaining input
+	done         bool   // whether the parsing is finished (success or error)
+	backed       bool   // whether back() was called
+	offset, line int
+	cur          token
+}
+
+func newTextParser(s string) *textParser {
+	p := new(textParser)
+	p.s = s
+	p.line = 1
+	p.cur.line = 1
+	return p
+}
+
+func (p *textParser) errorf(format string, a ...interface{}) *ParseError {
+	pe := &ParseError{fmt.Sprintf(format, a...), p.cur.line, p.cur.offset}
+	p.cur.err = pe
+	p.done = true
+	return pe
+}
+
+// Numbers and identifiers are matched by [-+._A-Za-z0-9]
+func isIdentOrNumberChar(c byte) bool {
+	switch {
+	case 'A' <= c && c <= 'Z', 'a' <= c && c <= 'z':
+		return true
+	case '0' <= c && c <= '9':
+		return true
+	}
+	switch c {
+	case '-', '+', '.', '_':
+		return true
+	}
+	return false
+}
+
+func isWhitespace(c byte) bool {
+	switch c {
+	case ' ', '\t', '\n', '\r':
+		return true
+	}
+	return false
+}
+
+func isQuote(c byte) bool {
+	switch c {
+	case '"', '\'':
+		return true
+	}
+	return false
+}
+
+func (p *textParser) skipWhitespace() {
+	i := 0
+	for i < len(p.s) && (isWhitespace(p.s[i]) || p.s[i] == '#') {
+		if p.s[i] == '#' {
+			// comment; skip to end of line or input
+			for i < len(p.s) && p.s[i] != '\n' {
+				i++
+			}
+			if i == len(p.s) {
+				break
+			}
+		}
+		if p.s[i] == '\n' {
+			p.line++
+		}
+		i++
+	}
+	p.offset += i
+	p.s = p.s[i:len(p.s)]
+	if len(p.s) == 0 {
+		p.done = true
+	}
+}
+
+func (p *textParser) advance() {
+	// Skip whitespace
+	p.skipWhitespace()
+	if p.done {
+		return
+	}
+
+	// Start of non-whitespace
+	p.cur.err = nil
+	p.cur.offset, p.cur.line = p.offset, p.line
+	p.cur.unquoted = ""
+	switch p.s[0] {
+	case '<', '>', '{', '}', ':', '[', ']', ';', ',', '/':
+		// Single symbol
+		p.cur.value, p.s = p.s[0:1], p.s[1:len(p.s)]
+	case '"', '\'':
+		// Quoted string
+		i := 1
+		for i < len(p.s) && p.s[i] != p.s[0] && p.s[i] != '\n' {
+			if p.s[i] == '\\' && i+1 < len(p.s) {
+				// skip escaped char
+				i++
+			}
+			i++
+		}
+		if i >= len(p.s) || p.s[i] != p.s[0] {
+			p.errorf("unmatched quote")
+			return
+		}
+		unq, err := unquoteC(p.s[1:i], rune(p.s[0]))
+		if err != nil {
+			p.errorf("invalid quoted string %s: %v", p.s[0:i+1], err)
+			return
+		}
+		p.cur.value, p.s = p.s[0:i+1], p.s[i+1:len(p.s)]
+		p.cur.unquoted = unq
+	default:
+		i := 0
+		for i < len(p.s) && isIdentOrNumberChar(p.s
