@@ -623,4 +623,144 @@ func (p *textParser) readStruct(sv reflect.Value, terminator string) error {
 
 			// The map entry should be this sequence of tokens:
 			//	< key : KEY value : VALUE >
-			// How
+			// However, implementations may omit key or value, and technically
+			// we should support them in any order.  See b/28924776 for a time
+			// this went wrong.
+
+			tok := p.next()
+			var terminator string
+			switch tok.value {
+			case "<":
+				terminator = ">"
+			case "{":
+				terminator = "}"
+			default:
+				return p.errorf("expected '{' or '<', found %q", tok.value)
+			}
+			for {
+				tok := p.next()
+				if tok.err != nil {
+					return tok.err
+				}
+				if tok.value == terminator {
+					break
+				}
+				switch tok.value {
+				case "key":
+					if err := p.consumeToken(":"); err != nil {
+						return err
+					}
+					if err := p.readAny(key, props.mkeyprop); err != nil {
+						return err
+					}
+					if err := p.consumeOptionalSeparator(); err != nil {
+						return err
+					}
+				case "value":
+					if err := p.checkForColon(props.mvalprop, dst.Type().Elem()); err != nil {
+						return err
+					}
+					if err := p.readAny(val, props.mvalprop); err != nil {
+						return err
+					}
+					if err := p.consumeOptionalSeparator(); err != nil {
+						return err
+					}
+				default:
+					p.back()
+					return p.errorf(`expected "key", "value", or %q, found %q`, terminator, tok.value)
+				}
+			}
+
+			dst.SetMapIndex(key, val)
+			continue
+		}
+
+		// Check that it's not already set if it's not a repeated field.
+		if !props.Repeated && fieldSet[name] {
+			return p.errorf("non-repeated field %q was repeated", name)
+		}
+
+		if err := p.checkForColon(props, dst.Type()); err != nil {
+			return err
+		}
+
+		// Parse into the field.
+		fieldSet[name] = true
+		if err := p.readAny(dst, props); err != nil {
+			if _, ok := err.(*RequiredNotSetError); !ok {
+				return err
+			}
+			reqFieldErr = err
+		}
+		if props.Required {
+			reqCount--
+		}
+
+		if err := p.consumeOptionalSeparator(); err != nil {
+			return err
+		}
+
+	}
+
+	if reqCount > 0 {
+		return p.missingRequiredFieldError(sv)
+	}
+	return reqFieldErr
+}
+
+// consumeExtName consumes extension name or expanded Any type URL and the
+// following ']'. It returns the name or URL consumed.
+func (p *textParser) consumeExtName() (string, error) {
+	tok := p.next()
+	if tok.err != nil {
+		return "", tok.err
+	}
+
+	// If extension name or type url is quoted, it's a single token.
+	if len(tok.value) > 2 && isQuote(tok.value[0]) && tok.value[len(tok.value)-1] == tok.value[0] {
+		name, err := unquoteC(tok.value[1:len(tok.value)-1], rune(tok.value[0]))
+		if err != nil {
+			return "", err
+		}
+		return name, p.consumeToken("]")
+	}
+
+	// Consume everything up to "]"
+	var parts []string
+	for tok.value != "]" {
+		parts = append(parts, tok.value)
+		tok = p.next()
+		if tok.err != nil {
+			return "", p.errorf("unrecognized type_url or extension name: %s", tok.err)
+		}
+	}
+	return strings.Join(parts, ""), nil
+}
+
+// consumeOptionalSeparator consumes an optional semicolon or comma.
+// It is used in readStruct to provide backward compatibility.
+func (p *textParser) consumeOptionalSeparator() error {
+	tok := p.next()
+	if tok.err != nil {
+		return tok.err
+	}
+	if tok.value != ";" && tok.value != "," {
+		p.back()
+	}
+	return nil
+}
+
+func (p *textParser) readAny(v reflect.Value, props *Properties) error {
+	tok := p.next()
+	if tok.err != nil {
+		return tok.err
+	}
+	if tok.value == "" {
+		return p.errorf("unexpected EOF")
+	}
+	if len(props.CustomType) > 0 {
+		if props.Repeated {
+			t := reflect.TypeOf(v.Interface())
+			if t.Kind() == reflect.Slice {
+				tc := reflect.TypeOf(new(Marshaler))
