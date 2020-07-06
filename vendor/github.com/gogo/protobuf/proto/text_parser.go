@@ -364,4 +364,130 @@ func (p *textParser) next() *token {
 				return &p.cur
 			}
 			cat.value += " " + p.cur.value
-			cat.unquoted += p.c
+			cat.unquoted += p.cur.unquoted
+		}
+		p.done = false // parser may have seen EOF, but we want to return cat
+		p.cur = cat
+	}
+	return &p.cur
+}
+
+func (p *textParser) consumeToken(s string) error {
+	tok := p.next()
+	if tok.err != nil {
+		return tok.err
+	}
+	if tok.value != s {
+		p.back()
+		return p.errorf("expected %q, found %q", s, tok.value)
+	}
+	return nil
+}
+
+// Return a RequiredNotSetError indicating which required field was not set.
+func (p *textParser) missingRequiredFieldError(sv reflect.Value) *RequiredNotSetError {
+	st := sv.Type()
+	sprops := GetProperties(st)
+	for i := 0; i < st.NumField(); i++ {
+		if !isNil(sv.Field(i)) {
+			continue
+		}
+
+		props := sprops.Prop[i]
+		if props.Required {
+			return &RequiredNotSetError{fmt.Sprintf("%v.%v", st, props.OrigName)}
+		}
+	}
+	return &RequiredNotSetError{fmt.Sprintf("%v.<unknown field name>", st)} // should not happen
+}
+
+// Returns the index in the struct for the named field, as well as the parsed tag properties.
+func structFieldByName(sprops *StructProperties, name string) (int, *Properties, bool) {
+	i, ok := sprops.decoderOrigNames[name]
+	if ok {
+		return i, sprops.Prop[i], true
+	}
+	return -1, nil, false
+}
+
+// Consume a ':' from the input stream (if the next token is a colon),
+// returning an error if a colon is needed but not present.
+func (p *textParser) checkForColon(props *Properties, typ reflect.Type) *ParseError {
+	tok := p.next()
+	if tok.err != nil {
+		return tok.err
+	}
+	if tok.value != ":" {
+		// Colon is optional when the field is a group or message.
+		needColon := true
+		switch props.Wire {
+		case "group":
+			needColon = false
+		case "bytes":
+			// A "bytes" field is either a message, a string, or a repeated field;
+			// those three become *T, *string and []T respectively, so we can check for
+			// this field being a pointer to a non-string.
+			if typ.Kind() == reflect.Ptr {
+				// *T or *string
+				if typ.Elem().Kind() == reflect.String {
+					break
+				}
+			} else if typ.Kind() == reflect.Slice {
+				// []T or []*T
+				if typ.Elem().Kind() != reflect.Ptr {
+					break
+				}
+			} else if typ.Kind() == reflect.String {
+				// The proto3 exception is for a string field,
+				// which requires a colon.
+				break
+			}
+			needColon = false
+		}
+		if needColon {
+			return p.errorf("expected ':', found %q", tok.value)
+		}
+		p.back()
+	}
+	return nil
+}
+
+func (p *textParser) readStruct(sv reflect.Value, terminator string) error {
+	st := sv.Type()
+	sprops := GetProperties(st)
+	reqCount := sprops.reqCount
+	var reqFieldErr error
+	fieldSet := make(map[string]bool)
+	// A struct is a sequence of "name: value", terminated by one of
+	// '>' or '}', or the end of the input.  A name may also be
+	// "[extension]" or "[type/url]".
+	//
+	// The whole struct can also be an expanded Any message, like:
+	// [type/url] < ... struct contents ... >
+	for {
+		tok := p.next()
+		if tok.err != nil {
+			return tok.err
+		}
+		if tok.value == terminator {
+			break
+		}
+		if tok.value == "[" {
+			// Looks like an extension or an Any.
+			//
+			// TODO: Check whether we need to handle
+			// namespace rooted names (e.g. ".something.Foo").
+			extName, err := p.consumeExtName()
+			if err != nil {
+				return err
+			}
+
+			if s := strings.LastIndex(extName, "/"); s >= 0 {
+				// If it contains a slash, it's an Any type URL.
+				messageName := extName[s+1:]
+				mt := MessageType(messageName)
+				if mt == nil {
+					return p.errorf("unrecognized message %q in google.protobuf.Any", messageName)
+				}
+				tok = p.next()
+				if
