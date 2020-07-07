@@ -91,4 +91,125 @@ func (m *Struct) GetFields() map[string]*Value {
 // variants, absence of any variant indicates an error.
 //
 // The JSON representation for `Value` is JSON value.
-type Va
+type Value struct {
+	// The kind of value.
+	//
+	// Types that are valid to be assigned to Kind:
+	//	*Value_NullValue
+	//	*Value_NumberValue
+	//	*Value_StringValue
+	//	*Value_BoolValue
+	//	*Value_StructValue
+	//	*Value_ListValue
+	Kind isValue_Kind `protobuf_oneof:"kind"`
+}
+
+func (m *Value) Reset()                    { *m = Value{} }
+func (*Value) ProtoMessage()               {}
+func (*Value) Descriptor() ([]byte, []int) { return fileDescriptorStruct, []int{1} }
+func (*Value) XXX_WellKnownType() string   { return "Value" }
+
+type isValue_Kind interface {
+	isValue_Kind()
+	Equal(interface{}) bool
+	MarshalTo([]byte) (int, error)
+	Size() int
+}
+
+type Value_NullValue struct {
+	NullValue NullValue `protobuf:"varint,1,opt,name=null_value,json=nullValue,proto3,enum=google.protobuf.NullValue,oneof"`
+}
+type Value_NumberValue struct {
+	NumberValue float64 `protobuf:"fixed64,2,opt,name=number_value,json=numberValue,proto3,oneof"`
+}
+type Value_StringValue struct {
+	StringValue string `protobuf:"bytes,3,opt,name=string_value,json=stringValue,proto3,oneof"`
+}
+type Value_BoolValue struct {
+	BoolValue bool `protobuf:"varint,4,opt,name=bool_value,json=boolValue,proto3,oneof"`
+}
+type Value_StructValue struct {
+	StructValue *Struct `protobuf:"bytes,5,opt,name=struct_value,json=structValue,oneof"`
+}
+type Value_ListValue struct {
+	ListValue *ListValue `protobuf:"bytes,6,opt,name=list_value,json=listValue,oneof"`
+}
+
+func (*Value_NullValue) isValue_Kind()   {}
+func (*Value_NumberValue) isValue_Kind() {}
+func (*Value_StringValue) isValue_Kind() {}
+func (*Value_BoolValue) isValue_Kind()   {}
+func (*Value_StructValue) isValue_Kind() {}
+func (*Value_ListValue) isValue_Kind()   {}
+
+func (m *Value) GetKind() isValue_Kind {
+	if m != nil {
+		return m.Kind
+	}
+	return nil
+}
+
+func (m *Value) GetNullValue() NullValue {
+	if x, ok := m.GetKind().(*Value_NullValue); ok {
+		return x.NullValue
+	}
+	return NULL_VALUE
+}
+
+func (m *Value) GetNumberValue() float64 {
+	if x, ok := m.GetKind().(*Value_NumberValue); ok {
+		return x.NumberValue
+	}
+	return 0
+}
+
+func (m *Value) GetStringValue() string {
+	if x, ok := m.GetKind().(*Value_StringValue); ok {
+		return x.StringValue
+	}
+	return ""
+}
+
+func (m *Value) GetBoolValue() bool {
+	if x, ok := m.GetKind().(*Value_BoolValue); ok {
+		return x.BoolValue
+	}
+	return false
+}
+
+func (m *Value) GetStructValue() *Struct {
+	if x, ok := m.GetKind().(*Value_StructValue); ok {
+		return x.StructValue
+	}
+	return nil
+}
+
+func (m *Value) GetListValue() *ListValue {
+	if x, ok := m.GetKind().(*Value_ListValue); ok {
+		return x.ListValue
+	}
+	return nil
+}
+
+// XXX_OneofFuncs is for the internal use of the proto package.
+func (*Value) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
+	return _Value_OneofMarshaler, _Value_OneofUnmarshaler, _Value_OneofSizer, []interface{}{
+		(*Value_NullValue)(nil),
+		(*Value_NumberValue)(nil),
+		(*Value_StringValue)(nil),
+		(*Value_BoolValue)(nil),
+		(*Value_StructValue)(nil),
+		(*Value_ListValue)(nil),
+	}
+}
+
+func _Value_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
+	m := msg.(*Value)
+	// kind
+	switch x := m.Kind.(type) {
+	case *Value_NullValue:
+		_ = b.EncodeVarint(1<<3 | proto.WireVarint)
+		_ = b.EncodeVarint(uint64(x.NullValue))
+	case *Value_NumberValue:
+		_ = b.EncodeVarint(2<<3 | proto.WireFixed64)
+		_ = b.EncodeFi
