@@ -336,4 +336,189 @@ type ListValue struct {
 
 func (m *ListValue) Reset()                    { *m = ListValue{} }
 func (*ListValue) ProtoMessage()               {}
-func (*ListValue) Descriptor() ([]byte, []int) { return fileDesc
+func (*ListValue) Descriptor() ([]byte, []int) { return fileDescriptorStruct, []int{2} }
+func (*ListValue) XXX_WellKnownType() string   { return "ListValue" }
+
+func (m *ListValue) GetValues() []*Value {
+	if m != nil {
+		return m.Values
+	}
+	return nil
+}
+
+func init() {
+	proto.RegisterType((*Struct)(nil), "google.protobuf.Struct")
+	proto.RegisterType((*Value)(nil), "google.protobuf.Value")
+	proto.RegisterType((*ListValue)(nil), "google.protobuf.ListValue")
+	proto.RegisterEnum("google.protobuf.NullValue", NullValue_name, NullValue_value)
+}
+func (x NullValue) String() string {
+	s, ok := NullValue_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
+}
+func (this *Struct) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*Struct)
+	if !ok {
+		that2, ok := that.(Struct)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if len(this.Fields) != len(that1.Fields) {
+		return false
+	}
+	for i := range this.Fields {
+		if !this.Fields[i].Equal(that1.Fields[i]) {
+			return false
+		}
+	}
+	return true
+}
+func (this *Value) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*Value)
+	if !ok {
+		that2, ok := that.(Value)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if that1.Kind == nil {
+		if this.Kind != nil {
+			return false
+		}
+	} else if this.Kind == nil {
+		return false
+	} else if !this.Kind.Equal(that1.Kind) {
+		return false
+	}
+	return true
+}
+func (this *Value_NullValue) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*Value_NullValue)
+	if !ok {
+		that2, ok := that.(Value_NullValue)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.NullValue != that1.NullValue {
+		return false
+	}
+	return true
+}
+func (this *Value_NumberValue) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*Value_NumberValue)
+	if !ok {
+		that2, ok := that.(Value_NumberValue)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.NumberValue != that1.NumberValue {
+		return false
+	}
+	return true
+}
+func (this *Value_StringValue) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*Value_StringValue)
+	if !ok {
+		that2, ok := that.(Value_StringValue)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.StringValue != that1.StringValue {
+		return false
+	}
+	return true
+}
+func (this *Value_BoolValue) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*Value_BoolValue)
+	if !ok {
+		that2, ok := that.(Value_BoolValue)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.BoolValue != that1.BoolValue {
+		return false
+	}
+	return true
+}
+func (this *Value_StructValue) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*Value_StructValue)
+	if !ok {
+	
