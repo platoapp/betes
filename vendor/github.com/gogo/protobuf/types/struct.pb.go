@@ -521,4 +521,161 @@ func (this *Value_StructValue) Equal(that interface{}) bool {
 
 	that1, ok := that.(*Value_StructValue)
 	if !ok {
-	
+		that2, ok := that.(Value_StructValue)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if !this.StructValue.Equal(that1.StructValue) {
+		return false
+	}
+	return true
+}
+func (this *Value_ListValue) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*Value_ListValue)
+	if !ok {
+		that2, ok := that.(Value_ListValue)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if !this.ListValue.Equal(that1.ListValue) {
+		return false
+	}
+	return true
+}
+func (this *ListValue) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*ListValue)
+	if !ok {
+		that2, ok := that.(ListValue)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if len(this.Values) != len(that1.Values) {
+		return false
+	}
+	for i := range this.Values {
+		if !this.Values[i].Equal(that1.Values[i]) {
+			return false
+		}
+	}
+	return true
+}
+func (this *Struct) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 5)
+	s = append(s, "&types.Struct{")
+	keysForFields := make([]string, 0, len(this.Fields))
+	for k := range this.Fields {
+		keysForFields = append(keysForFields, k)
+	}
+	sortkeys.Strings(keysForFields)
+	mapStringForFields := "map[string]*Value{"
+	for _, k := range keysForFields {
+		mapStringForFields += fmt.Sprintf("%#v: %#v,", k, this.Fields[k])
+	}
+	mapStringForFields += "}"
+	if this.Fields != nil {
+		s = append(s, "Fields: "+mapStringForFields+",\n")
+	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *Value) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 10)
+	s = append(s, "&types.Value{")
+	if this.Kind != nil {
+		s = append(s, "Kind: "+fmt.Sprintf("%#v", this.Kind)+",\n")
+	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *Value_NullValue) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&types.Value_NullValue{` +
+		`NullValue:` + fmt.Sprintf("%#v", this.NullValue) + `}`}, ", ")
+	return s
+}
+func (this *Value_NumberValue) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&types.Value_NumberValue{` +
+		`NumberValue:` + fmt.Sprintf("%#v", this.NumberValue) + `}`}, ", ")
+	return s
+}
+func (this *Value_StringValue) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&types.Value_StringValue{` +
+		`StringValue:` + fmt.Sprintf("%#v", this.StringValue) + `}`}, ", ")
+	return s
+}
+func (this *Value_BoolValue) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&types.Value_BoolValue{` +
+		`BoolValue:` + fmt.Sprintf("%#v", this.BoolValue) + `}`}, ", ")
+	return s
+}
+func (this *Value_StructValue) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&types.Value_StructValue{` +
+		`StructValue:` + fmt.Sprintf("%#v", this.StructValue) + `}`}, ", ")
+	return s
+}
+func (this *Value_ListValue) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&types.Value_ListValue{` +
+		`ListValue:` + fmt.Sprintf("%#v", this.ListValue) + `}`}, ", ")
+	return s
+}
+func (this *ListValue) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 5)
+	s = append(s, "&type
