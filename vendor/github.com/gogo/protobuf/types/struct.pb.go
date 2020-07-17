@@ -678,4 +678,170 @@ func (this *ListValue) GoString() string {
 		return "nil"
 	}
 	s := make([]string, 0, 5)
-	s = append(s, "&type
+	s = append(s, "&types.ListValue{")
+	if this.Values != nil {
+		s = append(s, "Values: "+fmt.Sprintf("%#v", this.Values)+",\n")
+	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func valueToGoStringStruct(v interface{}, typ string) string {
+	rv := reflect.ValueOf(v)
+	if rv.IsNil() {
+		return "nil"
+	}
+	pv := reflect.Indirect(rv).Interface()
+	return fmt.Sprintf("func(v %v) *%v { return &v } ( %#v )", typ, typ, pv)
+}
+func (m *Struct) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Struct) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Fields) > 0 {
+		for k := range m.Fields {
+			dAtA[i] = 0xa
+			i++
+			v := m.Fields[k]
+			msgSize := 0
+			if v != nil {
+				msgSize = v.Size()
+				msgSize += 1 + sovStruct(uint64(msgSize))
+			}
+			mapSize := 1 + len(k) + sovStruct(uint64(len(k))) + msgSize
+			i = encodeVarintStruct(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0xa
+			i++
+			i = encodeVarintStruct(dAtA, i, uint64(len(k)))
+			i += copy(dAtA[i:], k)
+			if v != nil {
+				dAtA[i] = 0x12
+				i++
+				i = encodeVarintStruct(dAtA, i, uint64(v.Size()))
+				n1, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
+				}
+				i += n1
+			}
+		}
+	}
+	return i, nil
+}
+
+func (m *Value) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Value) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Kind != nil {
+		nn2, err := m.Kind.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += nn2
+	}
+	return i, nil
+}
+
+func (m *Value_NullValue) MarshalTo(dAtA []byte) (int, error) {
+	i := 0
+	dAtA[i] = 0x8
+	i++
+	i = encodeVarintStruct(dAtA, i, uint64(m.NullValue))
+	return i, nil
+}
+func (m *Value_NumberValue) MarshalTo(dAtA []byte) (int, error) {
+	i := 0
+	dAtA[i] = 0x11
+	i++
+	binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.NumberValue))))
+	i += 8
+	return i, nil
+}
+func (m *Value_StringValue) MarshalTo(dAtA []byte) (int, error) {
+	i := 0
+	dAtA[i] = 0x1a
+	i++
+	i = encodeVarintStruct(dAtA, i, uint64(len(m.StringValue)))
+	i += copy(dAtA[i:], m.StringValue)
+	return i, nil
+}
+func (m *Value_BoolValue) MarshalTo(dAtA []byte) (int, error) {
+	i := 0
+	dAtA[i] = 0x20
+	i++
+	if m.BoolValue {
+		dAtA[i] = 1
+	} else {
+		dAtA[i] = 0
+	}
+	i++
+	return i, nil
+}
+func (m *Value_StructValue) MarshalTo(dAtA []byte) (int, error) {
+	i := 0
+	if m.StructValue != nil {
+		dAtA[i] = 0x2a
+		i++
+		i = encodeVarintStruct(dAtA, i, uint64(m.StructValue.Size()))
+		n3, err := m.StructValue.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n3
+	}
+	return i, nil
+}
+func (m *Value_ListValue) MarshalTo(dAtA []byte) (int, error) {
+	i := 0
+	if m.ListValue != nil {
+		dAtA[i] = 0x32
+		i++
+		i = encodeVarintStruct(dAtA, i, uint64(m.ListValue.Size()))
+		n4, err := m.ListValue.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n4
+	}
+	return i, nil
+}
+func (m *ListValue) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ListValue) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Values) > 0 {
+		for _, msg := range m.Values {
+			dAtA[i
