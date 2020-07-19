@@ -1155,4 +1155,156 @@ func (this *Value_NullValue) String() string {
 		`NullValue:` + fmt.Sprintf("%v", this.NullValue) + `,`,
 		`}`,
 	}, "")
-	ret
+	return s
+}
+func (this *Value_NumberValue) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&Value_NumberValue{`,
+		`NumberValue:` + fmt.Sprintf("%v", this.NumberValue) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *Value_StringValue) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&Value_StringValue{`,
+		`StringValue:` + fmt.Sprintf("%v", this.StringValue) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *Value_BoolValue) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&Value_BoolValue{`,
+		`BoolValue:` + fmt.Sprintf("%v", this.BoolValue) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *Value_StructValue) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&Value_StructValue{`,
+		`StructValue:` + strings.Replace(fmt.Sprintf("%v", this.StructValue), "Struct", "Struct", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *Value_ListValue) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&Value_ListValue{`,
+		`ListValue:` + strings.Replace(fmt.Sprintf("%v", this.ListValue), "ListValue", "ListValue", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *ListValue) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&ListValue{`,
+		`Values:` + strings.Replace(fmt.Sprintf("%v", this.Values), "Value", "Value", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func valueToStringStruct(v interface{}) string {
+	rv := reflect.ValueOf(v)
+	if rv.IsNil() {
+		return "nil"
+	}
+	pv := reflect.Indirect(rv).Interface()
+	return fmt.Sprintf("*%v", pv)
+}
+func (m *Struct) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowStruct
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Struct: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Struct: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Fields", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStruct
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthStruct
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Fields == nil {
+				m.Fields = make(map[string]*Value)
+			}
+			var mapkey string
+			var mapvalue *Value
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowStruct
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= (uint64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					var stringLenmapkey uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return
