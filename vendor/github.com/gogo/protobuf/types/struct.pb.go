@@ -989,4 +989,170 @@ func randUnrecognizedStruct(r randyStruct, maxFieldNumber int) (dAtA []byte) {
 }
 func randFieldStruct(dAtA []byte, r randyStruct, fieldNumber int, wire int) []byte {
 	key := uint32(fieldNumber)<<3 | uint32(wire)
-	
+	switch wire {
+	case 0:
+		dAtA = encodeVarintPopulateStruct(dAtA, uint64(key))
+		v4 := r.Int63()
+		if r.Intn(2) == 0 {
+			v4 *= -1
+		}
+		dAtA = encodeVarintPopulateStruct(dAtA, uint64(v4))
+	case 1:
+		dAtA = encodeVarintPopulateStruct(dAtA, uint64(key))
+		dAtA = append(dAtA, byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)))
+	case 2:
+		dAtA = encodeVarintPopulateStruct(dAtA, uint64(key))
+		ll := r.Intn(100)
+		dAtA = encodeVarintPopulateStruct(dAtA, uint64(ll))
+		for j := 0; j < ll; j++ {
+			dAtA = append(dAtA, byte(r.Intn(256)))
+		}
+	default:
+		dAtA = encodeVarintPopulateStruct(dAtA, uint64(key))
+		dAtA = append(dAtA, byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)))
+	}
+	return dAtA
+}
+func encodeVarintPopulateStruct(dAtA []byte, v uint64) []byte {
+	for v >= 1<<7 {
+		dAtA = append(dAtA, uint8(uint64(v)&0x7f|0x80))
+		v >>= 7
+	}
+	dAtA = append(dAtA, uint8(v))
+	return dAtA
+}
+func (m *Struct) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Fields) > 0 {
+		for k, v := range m.Fields {
+			_ = k
+			_ = v
+			l = 0
+			if v != nil {
+				l = v.Size()
+				l += 1 + sovStruct(uint64(l))
+			}
+			mapEntrySize := 1 + len(k) + sovStruct(uint64(len(k))) + l
+			n += mapEntrySize + 1 + sovStruct(uint64(mapEntrySize))
+		}
+	}
+	return n
+}
+
+func (m *Value) Size() (n int) {
+	var l int
+	_ = l
+	if m.Kind != nil {
+		n += m.Kind.Size()
+	}
+	return n
+}
+
+func (m *Value_NullValue) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovStruct(uint64(m.NullValue))
+	return n
+}
+func (m *Value_NumberValue) Size() (n int) {
+	var l int
+	_ = l
+	n += 9
+	return n
+}
+func (m *Value_StringValue) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.StringValue)
+	n += 1 + l + sovStruct(uint64(l))
+	return n
+}
+func (m *Value_BoolValue) Size() (n int) {
+	var l int
+	_ = l
+	n += 2
+	return n
+}
+func (m *Value_StructValue) Size() (n int) {
+	var l int
+	_ = l
+	if m.StructValue != nil {
+		l = m.StructValue.Size()
+		n += 1 + l + sovStruct(uint64(l))
+	}
+	return n
+}
+func (m *Value_ListValue) Size() (n int) {
+	var l int
+	_ = l
+	if m.ListValue != nil {
+		l = m.ListValue.Size()
+		n += 1 + l + sovStruct(uint64(l))
+	}
+	return n
+}
+func (m *ListValue) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Values) > 0 {
+		for _, e := range m.Values {
+			l = e.Size()
+			n += 1 + l + sovStruct(uint64(l))
+		}
+	}
+	return n
+}
+
+func sovStruct(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozStruct(x uint64) (n int) {
+	return sovStruct(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (this *Struct) String() string {
+	if this == nil {
+		return "nil"
+	}
+	keysForFields := make([]string, 0, len(this.Fields))
+	for k := range this.Fields {
+		keysForFields = append(keysForFields, k)
+	}
+	sortkeys.Strings(keysForFields)
+	mapStringForFields := "map[string]*Value{"
+	for _, k := range keysForFields {
+		mapStringForFields += fmt.Sprintf("%v: %v,", k, this.Fields[k])
+	}
+	mapStringForFields += "}"
+	s := strings.Join([]string{`&Struct{`,
+		`Fields:` + mapStringForFields + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *Value) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&Value{`,
+		`Kind:` + fmt.Sprintf("%v", this.Kind) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *Value_NullValue) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&Value_NullValue{`,
+		`NullValue:` + fmt.Sprintf("%v", this.NullValue) + `,`,
+		`}`,
+	}, "")
+	ret
