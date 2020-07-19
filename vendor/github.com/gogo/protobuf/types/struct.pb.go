@@ -844,4 +844,149 @@ func (m *ListValue) MarshalTo(dAtA []byte) (int, error) {
 	_ = l
 	if len(m.Values) > 0 {
 		for _, msg := range m.Values {
-			dAtA[i
+			dAtA[i] = 0xa
+			i++
+			i = encodeVarintStruct(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func encodeVarintStruct(dAtA []byte, offset int, v uint64) int {
+	for v >= 1<<7 {
+		dAtA[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	dAtA[offset] = uint8(v)
+	return offset + 1
+}
+func NewPopulatedStruct(r randyStruct, easy bool) *Struct {
+	this := &Struct{}
+	if r.Intn(10) == 0 {
+		v1 := r.Intn(10)
+		this.Fields = make(map[string]*Value)
+		for i := 0; i < v1; i++ {
+			this.Fields[randStringStruct(r)] = NewPopulatedValue(r, easy)
+		}
+	}
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
+func NewPopulatedValue(r randyStruct, easy bool) *Value {
+	this := &Value{}
+	oneofNumber_Kind := []int32{1, 2, 3, 4, 5, 6}[r.Intn(6)]
+	switch oneofNumber_Kind {
+	case 1:
+		this.Kind = NewPopulatedValue_NullValue(r, easy)
+	case 2:
+		this.Kind = NewPopulatedValue_NumberValue(r, easy)
+	case 3:
+		this.Kind = NewPopulatedValue_StringValue(r, easy)
+	case 4:
+		this.Kind = NewPopulatedValue_BoolValue(r, easy)
+	case 5:
+		this.Kind = NewPopulatedValue_StructValue(r, easy)
+	case 6:
+		this.Kind = NewPopulatedValue_ListValue(r, easy)
+	}
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
+func NewPopulatedValue_NullValue(r randyStruct, easy bool) *Value_NullValue {
+	this := &Value_NullValue{}
+	this.NullValue = NullValue([]int32{0}[r.Intn(1)])
+	return this
+}
+func NewPopulatedValue_NumberValue(r randyStruct, easy bool) *Value_NumberValue {
+	this := &Value_NumberValue{}
+	this.NumberValue = float64(r.Float64())
+	if r.Intn(2) == 0 {
+		this.NumberValue *= -1
+	}
+	return this
+}
+func NewPopulatedValue_StringValue(r randyStruct, easy bool) *Value_StringValue {
+	this := &Value_StringValue{}
+	this.StringValue = string(randStringStruct(r))
+	return this
+}
+func NewPopulatedValue_BoolValue(r randyStruct, easy bool) *Value_BoolValue {
+	this := &Value_BoolValue{}
+	this.BoolValue = bool(bool(r.Intn(2) == 0))
+	return this
+}
+func NewPopulatedValue_StructValue(r randyStruct, easy bool) *Value_StructValue {
+	this := &Value_StructValue{}
+	this.StructValue = NewPopulatedStruct(r, easy)
+	return this
+}
+func NewPopulatedValue_ListValue(r randyStruct, easy bool) *Value_ListValue {
+	this := &Value_ListValue{}
+	this.ListValue = NewPopulatedListValue(r, easy)
+	return this
+}
+func NewPopulatedListValue(r randyStruct, easy bool) *ListValue {
+	this := &ListValue{}
+	if r.Intn(10) == 0 {
+		v2 := r.Intn(5)
+		this.Values = make([]*Value, v2)
+		for i := 0; i < v2; i++ {
+			this.Values[i] = NewPopulatedValue(r, easy)
+		}
+	}
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
+type randyStruct interface {
+	Float32() float32
+	Float64() float64
+	Int63() int64
+	Int31() int32
+	Uint32() uint32
+	Intn(n int) int
+}
+
+func randUTF8RuneStruct(r randyStruct) rune {
+	ru := r.Intn(62)
+	if ru < 10 {
+		return rune(ru + 48)
+	} else if ru < 36 {
+		return rune(ru + 55)
+	}
+	return rune(ru + 61)
+}
+func randStringStruct(r randyStruct) string {
+	v3 := r.Intn(100)
+	tmps := make([]rune, v3)
+	for i := 0; i < v3; i++ {
+		tmps[i] = randUTF8RuneStruct(r)
+	}
+	return string(tmps)
+}
+func randUnrecognizedStruct(r randyStruct, maxFieldNumber int) (dAtA []byte) {
+	l := r.Intn(5)
+	for i := 0; i < l; i++ {
+		wire := r.Intn(4)
+		if wire == 3 {
+			wire = 5
+		}
+		fieldNumber := maxFieldNumber + r.Intn(100)
+		dAtA = randFieldStruct(dAtA, r, fieldNumber, wire)
+	}
+	return dAtA
+}
+func randFieldStruct(dAtA []byte, r randyStruct, fieldNumber int, wire int) []byte {
+	key := uint32(fieldNumber)<<3 | uint32(wire)
+	
