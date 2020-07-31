@@ -135,4 +135,119 @@ func (e *XXX_InternalExtensions) extensionsWrite() map[int32]Extension {
 }
 
 // extensionsRead returns the extensions map for read-only use.  It may be nil.
-/
+// The caller must hold the returned mutex's lock when accessing Elements within the map.
+func (e *XXX_InternalExtensions) extensionsRead() (map[int32]Extension, sync.Locker) {
+	if e.p == nil {
+		return nil, nil
+	}
+	return e.p.extensionMap, &e.p.mu
+}
+
+var extendableProtoType = reflect.TypeOf((*extendableProto)(nil)).Elem()
+var extendableProtoV1Type = reflect.TypeOf((*extendableProtoV1)(nil)).Elem()
+
+// ExtensionDesc represents an extension specification.
+// Used in generated code from the protocol compiler.
+type ExtensionDesc struct {
+	ExtendedType  Message     // nil pointer to the type that is being extended
+	ExtensionType interface{} // nil pointer to the extension type
+	Field         int32       // field number
+	Name          string      // fully-qualified name of extension, for text formatting
+	Tag           string      // protobuf tag style
+	Filename      string      // name of the file in which the extension is defined
+}
+
+func (ed *ExtensionDesc) repeated() bool {
+	t := reflect.TypeOf(ed.ExtensionType)
+	return t.Kind() == reflect.Slice && t.Elem().Kind() != reflect.Uint8
+}
+
+// Extension represents an extension in a message.
+type Extension struct {
+	// When an extension is stored in a message using SetExtension
+	// only desc and value are set. When the message is marshaled
+	// enc will be set to the encoded form of the message.
+	//
+	// When a message is unmarshaled and contains extensions, each
+	// extension will have only enc set. When such an extension is
+	// accessed using GetExtension (or GetExtensions) desc and value
+	// will be set.
+	desc  *ExtensionDesc
+	value interface{}
+	enc   []byte
+}
+
+// SetRawExtension is for testing only.
+func SetRawExtension(base Message, id int32, b []byte) {
+	epb, ok := extendable(base)
+	if !ok {
+		return
+	}
+	extmap := epb.extensionsWrite()
+	extmap[id] = Extension{enc: b}
+}
+
+// isExtensionField returns true iff the given field number is in an extension range.
+func isExtensionField(pb extendableProto, field int32) bool {
+	for _, er := range pb.ExtensionRangeArray() {
+		if er.Start <= field && field <= er.End {
+			return true
+		}
+	}
+	return false
+}
+
+// checkExtensionTypes checks that the given extension is valid for pb.
+func checkExtensionTypes(pb extendableProto, extension *ExtensionDesc) error {
+	var pbi interface{} = pb
+	// Check the extended type.
+	if ea, ok := pbi.(extensionAdapter); ok {
+		pbi = ea.extendableProtoV1
+	}
+	if a, b := reflect.TypeOf(pbi), reflect.TypeOf(extension.ExtendedType); a != b {
+		return errors.New("proto: bad extended type; " + b.String() + " does not extend " + a.String())
+	}
+	// Check the range.
+	if !isExtensionField(pb, extension.Field) {
+		return errors.New("proto: bad extension number; not in declared ranges")
+	}
+	return nil
+}
+
+// extPropKey is sufficient to uniquely identify an extension.
+type extPropKey struct {
+	base  reflect.Type
+	field int32
+}
+
+var extProp = struct {
+	sync.RWMutex
+	m map[extPropKey]*Properties
+}{
+	m: make(map[extPropKey]*Properties),
+}
+
+func extensionProperties(ed *ExtensionDesc) *Properties {
+	key := extPropKey{base: reflect.TypeOf(ed.ExtendedType), field: ed.Field}
+
+	extProp.RLock()
+	if prop, ok := extProp.m[key]; ok {
+		extProp.RUnlock()
+		return prop
+	}
+	extProp.RUnlock()
+
+	extProp.Lock()
+	defer extProp.Unlock()
+	// Check again.
+	if prop, ok := extProp.m[key]; ok {
+		return prop
+	}
+
+	prop := new(Properties)
+	prop.Init(reflect.TypeOf(ed.ExtensionType), "unknown_name", ed.Tag, nil)
+	extProp.m[key] = prop
+	return prop
+}
+
+// enc
