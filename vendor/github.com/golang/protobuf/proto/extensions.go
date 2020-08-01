@@ -250,4 +250,135 @@ func extensionProperties(ed *ExtensionDesc) *Properties {
 	return prop
 }
 
-// enc
+// encode encodes any unmarshaled (unencoded) extensions in e.
+func encodeExtensions(e *XXX_InternalExtensions) error {
+	m, mu := e.extensionsRead()
+	if m == nil {
+		return nil // fast path
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	return encodeExtensionsMap(m)
+}
+
+// encode encodes any unmarshaled (unencoded) extensions in e.
+func encodeExtensionsMap(m map[int32]Extension) error {
+	for k, e := range m {
+		if e.value == nil || e.desc == nil {
+			// Extension is only in its encoded form.
+			continue
+		}
+
+		// We don't skip extensions that have an encoded form set,
+		// because the extension value may have been mutated after
+		// the last time this function was called.
+
+		et := reflect.TypeOf(e.desc.ExtensionType)
+		props := extensionProperties(e.desc)
+
+		p := NewBuffer(nil)
+		// If e.value has type T, the encoder expects a *struct{ X T }.
+		// Pass a *T with a zero field and hope it all works out.
+		x := reflect.New(et)
+		x.Elem().Set(reflect.ValueOf(e.value))
+		if err := props.enc(p, props, toStructPointer(x)); err != nil {
+			return err
+		}
+		e.enc = p.buf
+		m[k] = e
+	}
+	return nil
+}
+
+func extensionsSize(e *XXX_InternalExtensions) (n int) {
+	m, mu := e.extensionsRead()
+	if m == nil {
+		return 0
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	return extensionsMapSize(m)
+}
+
+func extensionsMapSize(m map[int32]Extension) (n int) {
+	for _, e := range m {
+		if e.value == nil || e.desc == nil {
+			// Extension is only in its encoded form.
+			n += len(e.enc)
+			continue
+		}
+
+		// We don't skip extensions that have an encoded form set,
+		// because the extension value may have been mutated after
+		// the last time this function was called.
+
+		et := reflect.TypeOf(e.desc.ExtensionType)
+		props := extensionProperties(e.desc)
+
+		// If e.value has type T, the encoder expects a *struct{ X T }.
+		// Pass a *T with a zero field and hope it all works out.
+		x := reflect.New(et)
+		x.Elem().Set(reflect.ValueOf(e.value))
+		n += props.size(props, toStructPointer(x))
+	}
+	return
+}
+
+// HasExtension returns whether the given extension is present in pb.
+func HasExtension(pb Message, extension *ExtensionDesc) bool {
+	// TODO: Check types, field numbers, etc.?
+	epb, ok := extendable(pb)
+	if !ok {
+		return false
+	}
+	extmap, mu := epb.extensionsRead()
+	if extmap == nil {
+		return false
+	}
+	mu.Lock()
+	_, ok = extmap[extension.Field]
+	mu.Unlock()
+	return ok
+}
+
+// ClearExtension removes the given extension from pb.
+func ClearExtension(pb Message, extension *ExtensionDesc) {
+	epb, ok := extendable(pb)
+	if !ok {
+		return
+	}
+	// TODO: Check types, field numbers, etc.?
+	extmap := epb.extensionsWrite()
+	delete(extmap, extension.Field)
+}
+
+// GetExtension parses and returns the given extension of pb.
+// If the extension is not present and has no default value it returns ErrMissingExtension.
+func GetExtension(pb Message, extension *ExtensionDesc) (interface{}, error) {
+	epb, ok := extendable(pb)
+	if !ok {
+		return nil, errors.New("proto: not an extendable proto")
+	}
+
+	if err := checkExtensionTypes(epb, extension); err != nil {
+		return nil, err
+	}
+
+	emap, mu := epb.extensionsRead()
+	if emap == nil {
+		return defaultExtensionValue(extension)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	e, ok := emap[extension.Field]
+	if !ok {
+		// defaultExtensionValue returns the default value or
+		// ErrMissingExtension if there is no default.
+		return defaultExtensionValue(extension)
+	}
+
+	if e.value != nil {
+		// Already decoded. Check the descriptor, though.
+		if e.desc != extension {
+			// This shouldn't happen. If it does, it means that
+			
