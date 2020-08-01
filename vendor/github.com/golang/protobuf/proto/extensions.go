@@ -381,4 +381,121 @@ func GetExtension(pb Message, extension *ExtensionDesc) (interface{}, error) {
 		// Already decoded. Check the descriptor, though.
 		if e.desc != extension {
 			// This shouldn't happen. If it does, it means that
-			
+			// GetExtension was called twice with two different
+			// descriptors with the same field number.
+			return nil, errors.New("proto: descriptor conflict")
+		}
+		return e.value, nil
+	}
+
+	v, err := decodeExtension(e.enc, extension)
+	if err != nil {
+		return nil, err
+	}
+
+	// Remember the decoded version and drop the encoded version.
+	// That way it is safe to mutate what we return.
+	e.value = v
+	e.desc = extension
+	e.enc = nil
+	emap[extension.Field] = e
+	return e.value, nil
+}
+
+// defaultExtensionValue returns the default value for extension.
+// If no default for an extension is defined ErrMissingExtension is returned.
+func defaultExtensionValue(extension *ExtensionDesc) (interface{}, error) {
+	t := reflect.TypeOf(extension.ExtensionType)
+	props := extensionProperties(extension)
+
+	sf, _, err := fieldDefault(t, props)
+	if err != nil {
+		return nil, err
+	}
+
+	if sf == nil || sf.value == nil {
+		// There is no default value.
+		return nil, ErrMissingExtension
+	}
+
+	if t.Kind() != reflect.Ptr {
+		// We do not need to return a Ptr, we can directly return sf.value.
+		return sf.value, nil
+	}
+
+	// We need to return an interface{} that is a pointer to sf.value.
+	value := reflect.New(t).Elem()
+	value.Set(reflect.New(value.Type().Elem()))
+	if sf.kind == reflect.Int32 {
+		// We may have an int32 or an enum, but the underlying data is int32.
+		// Since we can't set an int32 into a non int32 reflect.value directly
+		// set it as a int32.
+		value.Elem().SetInt(int64(sf.value.(int32)))
+	} else {
+		value.Elem().Set(reflect.ValueOf(sf.value))
+	}
+	return value.Interface(), nil
+}
+
+// decodeExtension decodes an extension encoded in b.
+func decodeExtension(b []byte, extension *ExtensionDesc) (interface{}, error) {
+	o := NewBuffer(b)
+
+	t := reflect.TypeOf(extension.ExtensionType)
+
+	props := extensionProperties(extension)
+
+	// t is a pointer to a struct, pointer to basic type or a slice.
+	// Allocate a "field" to store the pointer/slice itself; the
+	// pointer/slice will be stored here. We pass
+	// the address of this field to props.dec.
+	// This passes a zero field and a *t and lets props.dec
+	// interpret it as a *struct{ x t }.
+	value := reflect.New(t).Elem()
+
+	for {
+		// Discard wire type and field number varint. It isn't needed.
+		if _, err := o.DecodeVarint(); err != nil {
+			return nil, err
+		}
+
+		if err := props.dec(o, props, toStructPointer(value.Addr())); err != nil {
+			return nil, err
+		}
+
+		if o.index >= len(o.buf) {
+			break
+		}
+	}
+	return value.Interface(), nil
+}
+
+// GetExtensions returns a slice of the extensions present in pb that are also listed in es.
+// The returned slice has the same length as es; missing extensions will appear as nil elements.
+func GetExtensions(pb Message, es []*ExtensionDesc) (extensions []interface{}, err error) {
+	epb, ok := extendable(pb)
+	if !ok {
+		return nil, errors.New("proto: not an extendable proto")
+	}
+	extensions = make([]interface{}, len(es))
+	for i, e := range es {
+		extensions[i], err = GetExtension(epb, e)
+		if err == ErrMissingExtension {
+			err = nil
+		}
+		if err != nil {
+			return
+		}
+	}
+	return
+}
+
+// ExtensionDescs returns a new slice containing pb's extension descriptors, in undefined order.
+// For non-registered extensions, ExtensionDescs returns an incomplete descriptor containing
+// just the Field field, which defines the extension's field number.
+func ExtensionDescs(pb Message) ([]*ExtensionDesc, error) {
+	epb, ok := extendable(pb)
+	if !ok {
+		return nil, fmt.Errorf("proto: %T is not an extendable proto.Message", pb)
+	}
+	registeredEx
