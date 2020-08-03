@@ -498,4 +498,90 @@ func ExtensionDescs(pb Message) ([]*ExtensionDesc, error) {
 	if !ok {
 		return nil, fmt.Errorf("proto: %T is not an extendable proto.Message", pb)
 	}
-	registeredEx
+	registeredExtensions := RegisteredExtensions(pb)
+
+	emap, mu := epb.extensionsRead()
+	if emap == nil {
+		return nil, nil
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	extensions := make([]*ExtensionDesc, 0, len(emap))
+	for extid, e := range emap {
+		desc := e.desc
+		if desc == nil {
+			desc = registeredExtensions[extid]
+			if desc == nil {
+				desc = &ExtensionDesc{Field: extid}
+			}
+		}
+
+		extensions = append(extensions, desc)
+	}
+	return extensions, nil
+}
+
+// SetExtension sets the specified extension of pb to the specified value.
+func SetExtension(pb Message, extension *ExtensionDesc, value interface{}) error {
+	epb, ok := extendable(pb)
+	if !ok {
+		return errors.New("proto: not an extendable proto")
+	}
+	if err := checkExtensionTypes(epb, extension); err != nil {
+		return err
+	}
+	typ := reflect.TypeOf(extension.ExtensionType)
+	if typ != reflect.TypeOf(value) {
+		return errors.New("proto: bad extension value type")
+	}
+	// nil extension values need to be caught early, because the
+	// encoder can't distinguish an ErrNil due to a nil extension
+	// from an ErrNil due to a missing field. Extensions are
+	// always optional, so the encoder would just swallow the error
+	// and drop all the extensions from the encoded message.
+	if reflect.ValueOf(value).IsNil() {
+		return fmt.Errorf("proto: SetExtension called with nil value of type %T", value)
+	}
+
+	extmap := epb.extensionsWrite()
+	extmap[extension.Field] = Extension{desc: extension, value: value}
+	return nil
+}
+
+// ClearAllExtensions clears all extensions from pb.
+func ClearAllExtensions(pb Message) {
+	epb, ok := extendable(pb)
+	if !ok {
+		return
+	}
+	m := epb.extensionsWrite()
+	for k := range m {
+		delete(m, k)
+	}
+}
+
+// A global registry of extensions.
+// The generated code will register the generated descriptors by calling RegisterExtension.
+
+var extensionMaps = make(map[reflect.Type]map[int32]*ExtensionDesc)
+
+// RegisterExtension is called from the generated code.
+func RegisterExtension(desc *ExtensionDesc) {
+	st := reflect.TypeOf(desc.ExtendedType).Elem()
+	m := extensionMaps[st]
+	if m == nil {
+		m = make(map[int32]*ExtensionDesc)
+		extensionMaps[st] = m
+	}
+	if _, ok := m[desc.Field]; ok {
+		panic("proto: duplicate extension registered: " + st.String() + " " + strconv.Itoa(int(desc.Field)))
+	}
+	m[desc.Field] = desc
+}
+
+// RegisteredExtensions returns a map of the registered extensions of a
+// protocol buffer struct, indexed by the extension number.
+// The argument pb should be a nil pointer to the struct type.
+func RegisteredExtensions(pb Message) map[int32]*ExtensionDesc {
+	return extensionMaps[reflect.TypeOf(pb).Elem()]
+}
