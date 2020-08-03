@@ -164,4 +164,128 @@ type OneofProperties struct {
 // See encode.go, (*Buffer).enc_struct.
 
 func (sp *StructProperties) Len() int { return len(sp.order) }
-func (sp *StructProperties) 
+func (sp *StructProperties) Less(i, j int) bool {
+	return sp.Prop[sp.order[i]].Tag < sp.Prop[sp.order[j]].Tag
+}
+func (sp *StructProperties) Swap(i, j int) { sp.order[i], sp.order[j] = sp.order[j], sp.order[i] }
+
+// Properties represents the protocol-specific behavior of a single struct field.
+type Properties struct {
+	Name     string // name of the field, for error messages
+	OrigName string // original name before protocol compiler (always set)
+	JSONName string // name to use for JSON; determined by protoc
+	Wire     string
+	WireType int
+	Tag      int
+	Required bool
+	Optional bool
+	Repeated bool
+	Packed   bool   // relevant for repeated primitives only
+	Enum     string // set for enum types only
+	proto3   bool   // whether this is known to be a proto3 field; set for []byte only
+	oneof    bool   // whether this is a oneof field
+
+	Default    string // default value
+	HasDefault bool   // whether an explicit default was provided
+	def_uint64 uint64
+
+	enc           encoder
+	valEnc        valueEncoder // set for bool and numeric types only
+	field         field
+	tagcode       []byte // encoding of EncodeVarint((Tag<<3)|WireType)
+	tagbuf        [8]byte
+	stype         reflect.Type      // set for struct types only
+	sprop         *StructProperties // set for struct types only
+	isMarshaler   bool
+	isUnmarshaler bool
+
+	mtype    reflect.Type // set for map types only
+	mkeyprop *Properties  // set for map types only
+	mvalprop *Properties  // set for map types only
+
+	size    sizer
+	valSize valueSizer // set for bool and numeric types only
+
+	dec    decoder
+	valDec valueDecoder // set for bool and numeric types only
+
+	// If this is a packable field, this will be the decoder for the packed version of the field.
+	packedDec decoder
+}
+
+// String formats the properties in the protobuf struct field tag style.
+func (p *Properties) String() string {
+	s := p.Wire
+	s = ","
+	s += strconv.Itoa(p.Tag)
+	if p.Required {
+		s += ",req"
+	}
+	if p.Optional {
+		s += ",opt"
+	}
+	if p.Repeated {
+		s += ",rep"
+	}
+	if p.Packed {
+		s += ",packed"
+	}
+	s += ",name=" + p.OrigName
+	if p.JSONName != p.OrigName {
+		s += ",json=" + p.JSONName
+	}
+	if p.proto3 {
+		s += ",proto3"
+	}
+	if p.oneof {
+		s += ",oneof"
+	}
+	if len(p.Enum) > 0 {
+		s += ",enum=" + p.Enum
+	}
+	if p.HasDefault {
+		s += ",def=" + p.Default
+	}
+	return s
+}
+
+// Parse populates p by parsing a string in the protobuf struct field tag style.
+func (p *Properties) Parse(s string) {
+	// "bytes,49,opt,name=foo,def=hello!"
+	fields := strings.Split(s, ",") // breaks def=, but handled below.
+	if len(fields) < 2 {
+		fmt.Fprintf(os.Stderr, "proto: tag has too few fields: %q\n", s)
+		return
+	}
+
+	p.Wire = fields[0]
+	switch p.Wire {
+	case "varint":
+		p.WireType = WireVarint
+		p.valEnc = (*Buffer).EncodeVarint
+		p.valDec = (*Buffer).DecodeVarint
+		p.valSize = sizeVarint
+	case "fixed32":
+		p.WireType = WireFixed32
+		p.valEnc = (*Buffer).EncodeFixed32
+		p.valDec = (*Buffer).DecodeFixed32
+		p.valSize = sizeFixed32
+	case "fixed64":
+		p.WireType = WireFixed64
+		p.valEnc = (*Buffer).EncodeFixed64
+		p.valDec = (*Buffer).DecodeFixed64
+		p.valSize = sizeFixed64
+	case "zigzag32":
+		p.WireType = WireVarint
+		p.valEnc = (*Buffer).EncodeZigzag32
+		p.valDec = (*Buffer).DecodeZigzag32
+		p.valSize = sizeZigzag32
+	case "zigzag64":
+		p.WireType = WireVarint
+		p.valEnc = (*Buffer).EncodeZigzag64
+		p.valDec = (*Buffer).DecodeZigzag64
+		p.valSize = sizeZigzag64
+	case "bytes", "group":
+		p.WireType = WireBytes
+		// no numeric converter for non-numeric types
+	def
