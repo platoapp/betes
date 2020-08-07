@@ -288,4 +288,133 @@ func (p *Properties) Parse(s string) {
 	case "bytes", "group":
 		p.WireType = WireBytes
 		// no numeric converter for non-numeric types
-	def
+	default:
+		fmt.Fprintf(os.Stderr, "proto: tag has unknown wire type: %q\n", s)
+		return
+	}
+
+	var err error
+	p.Tag, err = strconv.Atoi(fields[1])
+	if err != nil {
+		return
+	}
+
+	for i := 2; i < len(fields); i++ {
+		f := fields[i]
+		switch {
+		case f == "req":
+			p.Required = true
+		case f == "opt":
+			p.Optional = true
+		case f == "rep":
+			p.Repeated = true
+		case f == "packed":
+			p.Packed = true
+		case strings.HasPrefix(f, "name="):
+			p.OrigName = f[5:]
+		case strings.HasPrefix(f, "json="):
+			p.JSONName = f[5:]
+		case strings.HasPrefix(f, "enum="):
+			p.Enum = f[5:]
+		case f == "proto3":
+			p.proto3 = true
+		case f == "oneof":
+			p.oneof = true
+		case strings.HasPrefix(f, "def="):
+			p.HasDefault = true
+			p.Default = f[4:] // rest of string
+			if i+1 < len(fields) {
+				// Commas aren't escaped, and def is always last.
+				p.Default += "," + strings.Join(fields[i+1:], ",")
+				break
+			}
+		}
+	}
+}
+
+func logNoSliceEnc(t1, t2 reflect.Type) {
+	fmt.Fprintf(os.Stderr, "proto: no slice oenc for %T = []%T\n", t1, t2)
+}
+
+var protoMessageType = reflect.TypeOf((*Message)(nil)).Elem()
+
+// Initialize the fields for encoding and decoding.
+func (p *Properties) setEncAndDec(typ reflect.Type, f *reflect.StructField, lockGetProp bool) {
+	p.enc = nil
+	p.dec = nil
+	p.size = nil
+
+	switch t1 := typ; t1.Kind() {
+	default:
+		fmt.Fprintf(os.Stderr, "proto: no coders for %v\n", t1)
+
+	// proto3 scalar types
+
+	case reflect.Bool:
+		p.enc = (*Buffer).enc_proto3_bool
+		p.dec = (*Buffer).dec_proto3_bool
+		p.size = size_proto3_bool
+	case reflect.Int32:
+		p.enc = (*Buffer).enc_proto3_int32
+		p.dec = (*Buffer).dec_proto3_int32
+		p.size = size_proto3_int32
+	case reflect.Uint32:
+		p.enc = (*Buffer).enc_proto3_uint32
+		p.dec = (*Buffer).dec_proto3_int32 // can reuse
+		p.size = size_proto3_uint32
+	case reflect.Int64, reflect.Uint64:
+		p.enc = (*Buffer).enc_proto3_int64
+		p.dec = (*Buffer).dec_proto3_int64
+		p.size = size_proto3_int64
+	case reflect.Float32:
+		p.enc = (*Buffer).enc_proto3_uint32 // can just treat them as bits
+		p.dec = (*Buffer).dec_proto3_int32
+		p.size = size_proto3_uint32
+	case reflect.Float64:
+		p.enc = (*Buffer).enc_proto3_int64 // can just treat them as bits
+		p.dec = (*Buffer).dec_proto3_int64
+		p.size = size_proto3_int64
+	case reflect.String:
+		p.enc = (*Buffer).enc_proto3_string
+		p.dec = (*Buffer).dec_proto3_string
+		p.size = size_proto3_string
+
+	case reflect.Ptr:
+		switch t2 := t1.Elem(); t2.Kind() {
+		default:
+			fmt.Fprintf(os.Stderr, "proto: no encoder function for %v -> %v\n", t1, t2)
+			break
+		case reflect.Bool:
+			p.enc = (*Buffer).enc_bool
+			p.dec = (*Buffer).dec_bool
+			p.size = size_bool
+		case reflect.Int32:
+			p.enc = (*Buffer).enc_int32
+			p.dec = (*Buffer).dec_int32
+			p.size = size_int32
+		case reflect.Uint32:
+			p.enc = (*Buffer).enc_uint32
+			p.dec = (*Buffer).dec_int32 // can reuse
+			p.size = size_uint32
+		case reflect.Int64, reflect.Uint64:
+			p.enc = (*Buffer).enc_int64
+			p.dec = (*Buffer).dec_int64
+			p.size = size_int64
+		case reflect.Float32:
+			p.enc = (*Buffer).enc_uint32 // can just treat them as bits
+			p.dec = (*Buffer).dec_int32
+			p.size = size_uint32
+		case reflect.Float64:
+			p.enc = (*Buffer).enc_int64 // can just treat them as bits
+			p.dec = (*Buffer).dec_int64
+			p.size = size_int64
+		case reflect.String:
+			p.enc = (*Buffer).enc_string
+			p.dec = (*Buffer).dec_string
+			p.size = size_string
+		case reflect.Struct:
+			p.stype = t1.Elem()
+			p.isMarshaler = isMarshaler(t1)
+			p.isUnmarshaler = isUnmarshaler(t1)
+			if p.Wire == "bytes" {
+				p.enc = (*Buffer).enc_struct_mess
