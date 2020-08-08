@@ -417,4 +417,127 @@ func (p *Properties) setEncAndDec(typ reflect.Type, f *reflect.StructField, lock
 			p.isMarshaler = isMarshaler(t1)
 			p.isUnmarshaler = isUnmarshaler(t1)
 			if p.Wire == "bytes" {
-				p.enc = (*Buffer).enc_struct_mess
+				p.enc = (*Buffer).enc_struct_message
+				p.dec = (*Buffer).dec_struct_message
+				p.size = size_struct_message
+			} else {
+				p.enc = (*Buffer).enc_struct_group
+				p.dec = (*Buffer).dec_struct_group
+				p.size = size_struct_group
+			}
+		}
+
+	case reflect.Slice:
+		switch t2 := t1.Elem(); t2.Kind() {
+		default:
+			logNoSliceEnc(t1, t2)
+			break
+		case reflect.Bool:
+			if p.Packed {
+				p.enc = (*Buffer).enc_slice_packed_bool
+				p.size = size_slice_packed_bool
+			} else {
+				p.enc = (*Buffer).enc_slice_bool
+				p.size = size_slice_bool
+			}
+			p.dec = (*Buffer).dec_slice_bool
+			p.packedDec = (*Buffer).dec_slice_packed_bool
+		case reflect.Int32:
+			if p.Packed {
+				p.enc = (*Buffer).enc_slice_packed_int32
+				p.size = size_slice_packed_int32
+			} else {
+				p.enc = (*Buffer).enc_slice_int32
+				p.size = size_slice_int32
+			}
+			p.dec = (*Buffer).dec_slice_int32
+			p.packedDec = (*Buffer).dec_slice_packed_int32
+		case reflect.Uint32:
+			if p.Packed {
+				p.enc = (*Buffer).enc_slice_packed_uint32
+				p.size = size_slice_packed_uint32
+			} else {
+				p.enc = (*Buffer).enc_slice_uint32
+				p.size = size_slice_uint32
+			}
+			p.dec = (*Buffer).dec_slice_int32
+			p.packedDec = (*Buffer).dec_slice_packed_int32
+		case reflect.Int64, reflect.Uint64:
+			if p.Packed {
+				p.enc = (*Buffer).enc_slice_packed_int64
+				p.size = size_slice_packed_int64
+			} else {
+				p.enc = (*Buffer).enc_slice_int64
+				p.size = size_slice_int64
+			}
+			p.dec = (*Buffer).dec_slice_int64
+			p.packedDec = (*Buffer).dec_slice_packed_int64
+		case reflect.Uint8:
+			p.dec = (*Buffer).dec_slice_byte
+			if p.proto3 {
+				p.enc = (*Buffer).enc_proto3_slice_byte
+				p.size = size_proto3_slice_byte
+			} else {
+				p.enc = (*Buffer).enc_slice_byte
+				p.size = size_slice_byte
+			}
+		case reflect.Float32, reflect.Float64:
+			switch t2.Bits() {
+			case 32:
+				// can just treat them as bits
+				if p.Packed {
+					p.enc = (*Buffer).enc_slice_packed_uint32
+					p.size = size_slice_packed_uint32
+				} else {
+					p.enc = (*Buffer).enc_slice_uint32
+					p.size = size_slice_uint32
+				}
+				p.dec = (*Buffer).dec_slice_int32
+				p.packedDec = (*Buffer).dec_slice_packed_int32
+			case 64:
+				// can just treat them as bits
+				if p.Packed {
+					p.enc = (*Buffer).enc_slice_packed_int64
+					p.size = size_slice_packed_int64
+				} else {
+					p.enc = (*Buffer).enc_slice_int64
+					p.size = size_slice_int64
+				}
+				p.dec = (*Buffer).dec_slice_int64
+				p.packedDec = (*Buffer).dec_slice_packed_int64
+			default:
+				logNoSliceEnc(t1, t2)
+				break
+			}
+		case reflect.String:
+			p.enc = (*Buffer).enc_slice_string
+			p.dec = (*Buffer).dec_slice_string
+			p.size = size_slice_string
+		case reflect.Ptr:
+			switch t3 := t2.Elem(); t3.Kind() {
+			default:
+				fmt.Fprintf(os.Stderr, "proto: no ptr oenc for %T -> %T -> %T\n", t1, t2, t3)
+				break
+			case reflect.Struct:
+				p.stype = t2.Elem()
+				p.isMarshaler = isMarshaler(t2)
+				p.isUnmarshaler = isUnmarshaler(t2)
+				if p.Wire == "bytes" {
+					p.enc = (*Buffer).enc_slice_struct_message
+					p.dec = (*Buffer).dec_slice_struct_message
+					p.size = size_slice_struct_message
+				} else {
+					p.enc = (*Buffer).enc_slice_struct_group
+					p.dec = (*Buffer).dec_slice_struct_group
+					p.size = size_slice_struct_group
+				}
+			}
+		case reflect.Slice:
+			switch t2.Elem().Kind() {
+			default:
+				fmt.Fprintf(os.Stderr, "proto: no slice elem oenc for %T -> %T -> %T\n", t1, t2, t2.Elem())
+				break
+			case reflect.Uint8:
+				p.enc = (*Buffer).enc_slice_slice_byte
+				p.dec = (*Buffer).dec_slice_slice_byte
+				
