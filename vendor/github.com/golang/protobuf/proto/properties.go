@@ -665,4 +665,128 @@ func GetProperties(t reflect.Type) *StructProperties {
 func getPropertiesLocked(t reflect.Type) *StructProperties {
 	if prop, ok := propertiesMap[t]; ok {
 		if collectStats {
-			stats.
+			stats.Chit++
+		}
+		return prop
+	}
+	if collectStats {
+		stats.Cmiss++
+	}
+
+	prop := new(StructProperties)
+	// in case of recursive protos, fill this in now.
+	propertiesMap[t] = prop
+
+	// build properties
+	prop.extendable = reflect.PtrTo(t).Implements(extendableProtoType) ||
+		reflect.PtrTo(t).Implements(extendableProtoV1Type)
+	prop.unrecField = invalidField
+	prop.Prop = make([]*Properties, t.NumField())
+	prop.order = make([]int, t.NumField())
+
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		p := new(Properties)
+		name := f.Name
+		p.init(f.Type, name, f.Tag.Get("protobuf"), &f, false)
+
+		if f.Name == "XXX_InternalExtensions" { // special case
+			p.enc = (*Buffer).enc_exts
+			p.dec = nil // not needed
+			p.size = size_exts
+		} else if f.Name == "XXX_extensions" { // special case
+			p.enc = (*Buffer).enc_map
+			p.dec = nil // not needed
+			p.size = size_map
+		} else if f.Name == "XXX_unrecognized" { // special case
+			prop.unrecField = toField(&f)
+		}
+		oneof := f.Tag.Get("protobuf_oneof") // special case
+		if oneof != "" {
+			// Oneof fields don't use the traditional protobuf tag.
+			p.OrigName = oneof
+		}
+		prop.Prop[i] = p
+		prop.order[i] = i
+		if debug {
+			print(i, " ", f.Name, " ", t.String(), " ")
+			if p.Tag > 0 {
+				print(p.String())
+			}
+			print("\n")
+		}
+		if p.enc == nil && !strings.HasPrefix(f.Name, "XXX_") && oneof == "" {
+			fmt.Fprintln(os.Stderr, "proto: no encoder for", f.Name, f.Type.String(), "[GetProperties]")
+		}
+	}
+
+	// Re-order prop.order.
+	sort.Sort(prop)
+
+	type oneofMessage interface {
+		XXX_OneofFuncs() (func(Message, *Buffer) error, func(Message, int, int, *Buffer) (bool, error), func(Message) int, []interface{})
+	}
+	if om, ok := reflect.Zero(reflect.PtrTo(t)).Interface().(oneofMessage); ok {
+		var oots []interface{}
+		prop.oneofMarshaler, prop.oneofUnmarshaler, prop.oneofSizer, oots = om.XXX_OneofFuncs()
+		prop.stype = t
+
+		// Interpret oneof metadata.
+		prop.OneofTypes = make(map[string]*OneofProperties)
+		for _, oot := range oots {
+			oop := &OneofProperties{
+				Type: reflect.ValueOf(oot).Type(), // *T
+				Prop: new(Properties),
+			}
+			sft := oop.Type.Elem().Field(0)
+			oop.Prop.Name = sft.Name
+			oop.Prop.Parse(sft.Tag.Get("protobuf"))
+			// There will be exactly one interface field that
+			// this new value is assignable to.
+			for i := 0; i < t.NumField(); i++ {
+				f := t.Field(i)
+				if f.Type.Kind() != reflect.Interface {
+					continue
+				}
+				if !oop.Type.AssignableTo(f.Type) {
+					continue
+				}
+				oop.Field = i
+				break
+			}
+			prop.OneofTypes[oop.Prop.OrigName] = oop
+		}
+	}
+
+	// build required counts
+	// build tags
+	reqCount := 0
+	prop.decoderOrigNames = make(map[string]int)
+	for i, p := range prop.Prop {
+		if strings.HasPrefix(p.Name, "XXX_") {
+			// Internal fields should not appear in tags/origNames maps.
+			// They are handled specially when encoding and decoding.
+			continue
+		}
+		if p.Required {
+			reqCount++
+		}
+		prop.decoderTags.put(p.Tag, i)
+		prop.decoderOrigNames[p.OrigName] = i
+	}
+	prop.reqCount = reqCount
+
+	return prop
+}
+
+// Return the Properties object for the x[0]'th field of the structure.
+func propByIndex(t reflect.Type, x []int) *Properties {
+	if len(x) != 1 {
+		fmt.Fprintf(os.Stderr, "proto: field index dimension %d (not 1) for type %s\n", len(x), t)
+		return nil
+	}
+	prop := GetProperties(t)
+	return prop.Prop[x[0]]
+}
+
+// Get the address and type of a pointer to a struct from an interface.
