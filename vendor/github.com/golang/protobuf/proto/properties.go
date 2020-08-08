@@ -540,4 +540,129 @@ func (p *Properties) setEncAndDec(typ reflect.Type, f *reflect.StructField, lock
 			case reflect.Uint8:
 				p.enc = (*Buffer).enc_slice_slice_byte
 				p.dec = (*Buffer).dec_slice_slice_byte
-				
+				p.size = size_slice_slice_byte
+			}
+		}
+
+	case reflect.Map:
+		p.enc = (*Buffer).enc_new_map
+		p.dec = (*Buffer).dec_new_map
+		p.size = size_new_map
+
+		p.mtype = t1
+		p.mkeyprop = &Properties{}
+		p.mkeyprop.init(reflect.PtrTo(p.mtype.Key()), "Key", f.Tag.Get("protobuf_key"), nil, lockGetProp)
+		p.mvalprop = &Properties{}
+		vtype := p.mtype.Elem()
+		if vtype.Kind() != reflect.Ptr && vtype.Kind() != reflect.Slice {
+			// The value type is not a message (*T) or bytes ([]byte),
+			// so we need encoders for the pointer to this type.
+			vtype = reflect.PtrTo(vtype)
+		}
+		p.mvalprop.init(vtype, "Value", f.Tag.Get("protobuf_val"), nil, lockGetProp)
+	}
+
+	// precalculate tag code
+	wire := p.WireType
+	if p.Packed {
+		wire = WireBytes
+	}
+	x := uint32(p.Tag)<<3 | uint32(wire)
+	i := 0
+	for i = 0; x > 127; i++ {
+		p.tagbuf[i] = 0x80 | uint8(x&0x7F)
+		x >>= 7
+	}
+	p.tagbuf[i] = uint8(x)
+	p.tagcode = p.tagbuf[0 : i+1]
+
+	if p.stype != nil {
+		if lockGetProp {
+			p.sprop = GetProperties(p.stype)
+		} else {
+			p.sprop = getPropertiesLocked(p.stype)
+		}
+	}
+}
+
+var (
+	marshalerType   = reflect.TypeOf((*Marshaler)(nil)).Elem()
+	unmarshalerType = reflect.TypeOf((*Unmarshaler)(nil)).Elem()
+)
+
+// isMarshaler reports whether type t implements Marshaler.
+func isMarshaler(t reflect.Type) bool {
+	// We're checking for (likely) pointer-receiver methods
+	// so if t is not a pointer, something is very wrong.
+	// The calls above only invoke isMarshaler on pointer types.
+	if t.Kind() != reflect.Ptr {
+		panic("proto: misuse of isMarshaler")
+	}
+	return t.Implements(marshalerType)
+}
+
+// isUnmarshaler reports whether type t implements Unmarshaler.
+func isUnmarshaler(t reflect.Type) bool {
+	// We're checking for (likely) pointer-receiver methods
+	// so if t is not a pointer, something is very wrong.
+	// The calls above only invoke isUnmarshaler on pointer types.
+	if t.Kind() != reflect.Ptr {
+		panic("proto: misuse of isUnmarshaler")
+	}
+	return t.Implements(unmarshalerType)
+}
+
+// Init populates the properties from a protocol buffer struct tag.
+func (p *Properties) Init(typ reflect.Type, name, tag string, f *reflect.StructField) {
+	p.init(typ, name, tag, f, true)
+}
+
+func (p *Properties) init(typ reflect.Type, name, tag string, f *reflect.StructField, lockGetProp bool) {
+	// "bytes,49,opt,def=hello!"
+	p.Name = name
+	p.OrigName = name
+	if f != nil {
+		p.field = toField(f)
+	}
+	if tag == "" {
+		return
+	}
+	p.Parse(tag)
+	p.setEncAndDec(typ, f, lockGetProp)
+}
+
+var (
+	propertiesMu  sync.RWMutex
+	propertiesMap = make(map[reflect.Type]*StructProperties)
+)
+
+// GetProperties returns the list of properties for the type represented by t.
+// t must represent a generated struct type of a protocol message.
+func GetProperties(t reflect.Type) *StructProperties {
+	if t.Kind() != reflect.Struct {
+		panic("proto: type must have kind struct")
+	}
+
+	// Most calls to GetProperties in a long-running program will be
+	// retrieving details for types we have seen before.
+	propertiesMu.RLock()
+	sprop, ok := propertiesMap[t]
+	propertiesMu.RUnlock()
+	if ok {
+		if collectStats {
+			stats.Chit++
+		}
+		return sprop
+	}
+
+	propertiesMu.Lock()
+	sprop = getPropertiesLocked(t)
+	propertiesMu.Unlock()
+	return sprop
+}
+
+// getPropertiesLocked requires that propertiesMu is held.
+func getPropertiesLocked(t reflect.Type) *StructProperties {
+	if prop, ok := propertiesMap[t]; ok {
+		if collectStats {
+			stats.
