@@ -85,4 +85,179 @@ type Message struct {
 func (m *Message) Reset()                    { *m = Message{} }
 func (m *Message) String() string            { return proto.CompactTextString(m) }
 func (*Message) ProtoMessage()               {}
-func (*Message) Descriptor() ([]byte, []int) { return fileDescriptor0, 
+func (*Message) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{0} }
+
+func (m *Message) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+func (m *Message) GetHilarity() Message_Humour {
+	if m != nil {
+		return m.Hilarity
+	}
+	return Message_UNKNOWN
+}
+
+func (m *Message) GetHeightInCm() uint32 {
+	if m != nil {
+		return m.HeightInCm
+	}
+	return 0
+}
+
+func (m *Message) GetData() []byte {
+	if m != nil {
+		return m.Data
+	}
+	return nil
+}
+
+func (m *Message) GetResultCount() int64 {
+	if m != nil {
+		return m.ResultCount
+	}
+	return 0
+}
+
+func (m *Message) GetTrueScotsman() bool {
+	if m != nil {
+		return m.TrueScotsman
+	}
+	return false
+}
+
+func (m *Message) GetScore() float32 {
+	if m != nil {
+		return m.Score
+	}
+	return 0
+}
+
+func (m *Message) GetKey() []uint64 {
+	if m != nil {
+		return m.Key
+	}
+	return nil
+}
+
+func (m *Message) GetShortKey() []int32 {
+	if m != nil {
+		return m.ShortKey
+	}
+	return nil
+}
+
+func (m *Message) GetNested() *Nested {
+	if m != nil {
+		return m.Nested
+	}
+	return nil
+}
+
+func (m *Message) GetRFunny() []Message_Humour {
+	if m != nil {
+		return m.RFunny
+	}
+	return nil
+}
+
+func (m *Message) GetTerrain() map[string]*Nested {
+	if m != nil {
+		return m.Terrain
+	}
+	return nil
+}
+
+func (m *Message) GetProto2Field() *testdata.SubDefaults {
+	if m != nil {
+		return m.Proto2Field
+	}
+	return nil
+}
+
+func (m *Message) GetProto2Value() map[string]*testdata.SubDefaults {
+	if m != nil {
+		return m.Proto2Value
+	}
+	return nil
+}
+
+func (m *Message) GetAnything() *google_protobuf.Any {
+	if m != nil {
+		return m.Anything
+	}
+	return nil
+}
+
+func (m *Message) GetManyThings() []*google_protobuf.Any {
+	if m != nil {
+		return m.ManyThings
+	}
+	return nil
+}
+
+func (m *Message) GetSubmessage() *Message {
+	if m != nil {
+		return m.Submessage
+	}
+	return nil
+}
+
+func (m *Message) GetChildren() []*Message {
+	if m != nil {
+		return m.Children
+	}
+	return nil
+}
+
+type Nested struct {
+	Bunny string `protobuf:"bytes,1,opt,name=bunny" json:"bunny,omitempty"`
+	Cute  bool   `protobuf:"varint,2,opt,name=cute" json:"cute,omitempty"`
+}
+
+func (m *Nested) Reset()                    { *m = Nested{} }
+func (m *Nested) String() string            { return proto.CompactTextString(m) }
+func (*Nested) ProtoMessage()               {}
+func (*Nested) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{1} }
+
+func (m *Nested) GetBunny() string {
+	if m != nil {
+		return m.Bunny
+	}
+	return ""
+}
+
+func (m *Nested) GetCute() bool {
+	if m != nil {
+		return m.Cute
+	}
+	return false
+}
+
+type MessageWithMap struct {
+	ByteMapping map[bool][]byte `protobuf:"bytes,1,rep,name=byte_mapping,json=byteMapping" json:"byte_mapping,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value,proto3"`
+}
+
+func (m *MessageWithMap) Reset()                    { *m = MessageWithMap{} }
+func (m *MessageWithMap) String() string            { return proto.CompactTextString(m) }
+func (*MessageWithMap) ProtoMessage()               {}
+func (*MessageWithMap) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{2} }
+
+func (m *MessageWithMap) GetByteMapping() map[bool][]byte {
+	if m != nil {
+		return m.ByteMapping
+	}
+	return nil
+}
+
+type IntMap struct {
+	Rtt map[int32]int32 `protobuf:"bytes,1,rep,name=rtt" json:"rtt,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+}
+
+func (m *IntMap) Reset()                    { *m = IntMap{} }
+func (m *IntMap) String() string            { return proto.CompactTextString(m) }
+func (*IntMap) ProtoMessage()               {}
+func (*IntMap) Descriptor() ([]byt
