@@ -154,4 +154,146 @@ func (w *textWriter) indent() { w.ind++ }
 
 func (w *textWriter) unindent() {
 	if w.ind == 0 {
-		
+		log.Print("proto: textWriter unindented too far")
+		return
+	}
+	w.ind--
+}
+
+func writeName(w *textWriter, props *Properties) error {
+	if _, err := w.WriteString(props.OrigName); err != nil {
+		return err
+	}
+	if props.Wire != "group" {
+		return w.WriteByte(':')
+	}
+	return nil
+}
+
+// raw is the interface satisfied by RawMessage.
+type raw interface {
+	Bytes() []byte
+}
+
+func requiresQuotes(u string) bool {
+	// When type URL contains any characters except [0-9A-Za-z./\-]*, it must be quoted.
+	for _, ch := range u {
+		switch {
+		case ch == '.' || ch == '/' || ch == '_':
+			continue
+		case '0' <= ch && ch <= '9':
+			continue
+		case 'A' <= ch && ch <= 'Z':
+			continue
+		case 'a' <= ch && ch <= 'z':
+			continue
+		default:
+			return true
+		}
+	}
+	return false
+}
+
+// isAny reports whether sv is a google.protobuf.Any message
+func isAny(sv reflect.Value) bool {
+	type wkt interface {
+		XXX_WellKnownType() string
+	}
+	t, ok := sv.Addr().Interface().(wkt)
+	return ok && t.XXX_WellKnownType() == "Any"
+}
+
+// writeProto3Any writes an expanded google.protobuf.Any message.
+//
+// It returns (false, nil) if sv value can't be unmarshaled (e.g. because
+// required messages are not linked in).
+//
+// It returns (true, error) when sv was written in expanded format or an error
+// was encountered.
+func (tm *TextMarshaler) writeProto3Any(w *textWriter, sv reflect.Value) (bool, error) {
+	turl := sv.FieldByName("TypeUrl")
+	val := sv.FieldByName("Value")
+	if !turl.IsValid() || !val.IsValid() {
+		return true, errors.New("proto: invalid google.protobuf.Any message")
+	}
+
+	b, ok := val.Interface().([]byte)
+	if !ok {
+		return true, errors.New("proto: invalid google.protobuf.Any message")
+	}
+
+	parts := strings.Split(turl.String(), "/")
+	mt := MessageType(parts[len(parts)-1])
+	if mt == nil {
+		return false, nil
+	}
+	m := reflect.New(mt.Elem())
+	if err := Unmarshal(b, m.Interface().(Message)); err != nil {
+		return false, nil
+	}
+	w.Write([]byte("["))
+	u := turl.String()
+	if requiresQuotes(u) {
+		writeString(w, u)
+	} else {
+		w.Write([]byte(u))
+	}
+	if w.compact {
+		w.Write([]byte("]:<"))
+	} else {
+		w.Write([]byte("]: <\n"))
+		w.ind++
+	}
+	if err := tm.writeStruct(w, m.Elem()); err != nil {
+		return true, err
+	}
+	if w.compact {
+		w.Write([]byte("> "))
+	} else {
+		w.ind--
+		w.Write([]byte(">\n"))
+	}
+	return true, nil
+}
+
+func (tm *TextMarshaler) writeStruct(w *textWriter, sv reflect.Value) error {
+	if tm.ExpandAny && isAny(sv) {
+		if canExpand, err := tm.writeProto3Any(w, sv); canExpand {
+			return err
+		}
+	}
+	st := sv.Type()
+	sprops := GetProperties(st)
+	for i := 0; i < sv.NumField(); i++ {
+		fv := sv.Field(i)
+		props := sprops.Prop[i]
+		name := st.Field(i).Name
+
+		if strings.HasPrefix(name, "XXX_") {
+			// There are two XXX_ fields:
+			//   XXX_unrecognized []byte
+			//   XXX_extensions   map[int32]proto.Extension
+			// The first is handled here;
+			// the second is handled at the bottom of this function.
+			if name == "XXX_unrecognized" && !fv.IsNil() {
+				if err := writeUnknownStruct(w, fv.Interface().([]byte)); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if fv.Kind() == reflect.Ptr && fv.IsNil() {
+			// Field not filled in. This could be an optional field or
+			// a required field that wasn't filled in. Either way, there
+			// isn't anything we can show for it.
+			continue
+		}
+		if fv.Kind() == reflect.Slice && fv.IsNil() {
+			// Repeated field that is empty, or a bytes field that is unused.
+			continue
+		}
+
+		if props.Repeated && fv.Kind() == reflect.Slice {
+			// Repeated field.
+			for j := 0; j < fv.Len(); j++ {
+				if err :=
