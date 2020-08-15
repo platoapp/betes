@@ -296,4 +296,136 @@ func (tm *TextMarshaler) writeStruct(w *textWriter, sv reflect.Value) error {
 		if props.Repeated && fv.Kind() == reflect.Slice {
 			// Repeated field.
 			for j := 0; j < fv.Len(); j++ {
-				if err :=
+				if err := writeName(w, props); err != nil {
+					return err
+				}
+				if !w.compact {
+					if err := w.WriteByte(' '); err != nil {
+						return err
+					}
+				}
+				v := fv.Index(j)
+				if v.Kind() == reflect.Ptr && v.IsNil() {
+					// A nil message in a repeated field is not valid,
+					// but we can handle that more gracefully than panicking.
+					if _, err := w.Write([]byte("<nil>\n")); err != nil {
+						return err
+					}
+					continue
+				}
+				if err := tm.writeAny(w, v, props); err != nil {
+					return err
+				}
+				if err := w.WriteByte('\n'); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if fv.Kind() == reflect.Map {
+			// Map fields are rendered as a repeated struct with key/value fields.
+			keys := fv.MapKeys()
+			sort.Sort(mapKeys(keys))
+			for _, key := range keys {
+				val := fv.MapIndex(key)
+				if err := writeName(w, props); err != nil {
+					return err
+				}
+				if !w.compact {
+					if err := w.WriteByte(' '); err != nil {
+						return err
+					}
+				}
+				// open struct
+				if err := w.WriteByte('<'); err != nil {
+					return err
+				}
+				if !w.compact {
+					if err := w.WriteByte('\n'); err != nil {
+						return err
+					}
+				}
+				w.indent()
+				// key
+				if _, err := w.WriteString("key:"); err != nil {
+					return err
+				}
+				if !w.compact {
+					if err := w.WriteByte(' '); err != nil {
+						return err
+					}
+				}
+				if err := tm.writeAny(w, key, props.mkeyprop); err != nil {
+					return err
+				}
+				if err := w.WriteByte('\n'); err != nil {
+					return err
+				}
+				// nil values aren't legal, but we can avoid panicking because of them.
+				if val.Kind() != reflect.Ptr || !val.IsNil() {
+					// value
+					if _, err := w.WriteString("value:"); err != nil {
+						return err
+					}
+					if !w.compact {
+						if err := w.WriteByte(' '); err != nil {
+							return err
+						}
+					}
+					if err := tm.writeAny(w, val, props.mvalprop); err != nil {
+						return err
+					}
+					if err := w.WriteByte('\n'); err != nil {
+						return err
+					}
+				}
+				// close struct
+				w.unindent()
+				if err := w.WriteByte('>'); err != nil {
+					return err
+				}
+				if err := w.WriteByte('\n'); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if props.proto3 && fv.Kind() == reflect.Slice && fv.Len() == 0 {
+			// empty bytes field
+			continue
+		}
+		if fv.Kind() != reflect.Ptr && fv.Kind() != reflect.Slice {
+			// proto3 non-repeated scalar field; skip if zero value
+			if isProto3Zero(fv) {
+				continue
+			}
+		}
+
+		if fv.Kind() == reflect.Interface {
+			// Check if it is a oneof.
+			if st.Field(i).Tag.Get("protobuf_oneof") != "" {
+				// fv is nil, or holds a pointer to generated struct.
+				// That generated struct has exactly one field,
+				// which has a protobuf struct tag.
+				if fv.IsNil() {
+					continue
+				}
+				inner := fv.Elem().Elem() // interface -> *T -> T
+				tag := inner.Type().Field(0).Tag.Get("protobuf")
+				props = new(Properties) // Overwrite the outer props var, but not its pointee.
+				props.Parse(tag)
+				// Write the value in the oneof, not the oneof itself.
+				fv = inner.Field(0)
+
+				// Special case to cope with malformed messages gracefully:
+				// If the value in the oneof is a nil pointer, don't panic
+				// in writeAny.
+				if fv.Kind() == reflect.Ptr && fv.IsNil() {
+					// Use errors.New so writeAny won't render quotes.
+					msg := errors.New("/* nil */")
+					fv = reflect.ValueOf(&msg).Elem()
+				}
+			}
+		}
+
+		if err := writeName(w, props)
