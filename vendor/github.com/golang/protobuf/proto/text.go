@@ -577,4 +577,152 @@ func writeString(w *textWriter, s string) error {
 		var err error
 		// Divergence from C++: we don't escape apostrophes.
 		// There's no need to escape them, and the C++ parser
-		// copes 
+		// copes with a naked apostrophe.
+		switch c := s[i]; c {
+		case '\n':
+			_, err = w.w.Write(backslashN)
+		case '\r':
+			_, err = w.w.Write(backslashR)
+		case '\t':
+			_, err = w.w.Write(backslashT)
+		case '"':
+			_, err = w.w.Write(backslashDQ)
+		case '\\':
+			_, err = w.w.Write(backslashBS)
+		default:
+			if isprint(c) {
+				err = w.w.WriteByte(c)
+			} else {
+				_, err = fmt.Fprintf(w.w, "\\%03o", c)
+			}
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return w.WriteByte('"')
+}
+
+func writeUnknownStruct(w *textWriter, data []byte) (err error) {
+	if !w.compact {
+		if _, err := fmt.Fprintf(w, "/* %d unknown bytes */\n", len(data)); err != nil {
+			return err
+		}
+	}
+	b := NewBuffer(data)
+	for b.index < len(b.buf) {
+		x, err := b.DecodeVarint()
+		if err != nil {
+			_, err := fmt.Fprintf(w, "/* %v */\n", err)
+			return err
+		}
+		wire, tag := x&7, x>>3
+		if wire == WireEndGroup {
+			w.unindent()
+			if _, err := w.Write(endBraceNewline); err != nil {
+				return err
+			}
+			continue
+		}
+		if _, err := fmt.Fprint(w, tag); err != nil {
+			return err
+		}
+		if wire != WireStartGroup {
+			if err := w.WriteByte(':'); err != nil {
+				return err
+			}
+		}
+		if !w.compact || wire == WireStartGroup {
+			if err := w.WriteByte(' '); err != nil {
+				return err
+			}
+		}
+		switch wire {
+		case WireBytes:
+			buf, e := b.DecodeRawBytes(false)
+			if e == nil {
+				_, err = fmt.Fprintf(w, "%q", buf)
+			} else {
+				_, err = fmt.Fprintf(w, "/* %v */", e)
+			}
+		case WireFixed32:
+			x, err = b.DecodeFixed32()
+			err = writeUnknownInt(w, x, err)
+		case WireFixed64:
+			x, err = b.DecodeFixed64()
+			err = writeUnknownInt(w, x, err)
+		case WireStartGroup:
+			err = w.WriteByte('{')
+			w.indent()
+		case WireVarint:
+			x, err = b.DecodeVarint()
+			err = writeUnknownInt(w, x, err)
+		default:
+			_, err = fmt.Fprintf(w, "/* unknown wire type %d */", wire)
+		}
+		if err != nil {
+			return err
+		}
+		if err = w.WriteByte('\n'); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeUnknownInt(w *textWriter, x uint64, err error) error {
+	if err == nil {
+		_, err = fmt.Fprint(w, x)
+	} else {
+		_, err = fmt.Fprintf(w, "/* %v */", err)
+	}
+	return err
+}
+
+type int32Slice []int32
+
+func (s int32Slice) Len() int           { return len(s) }
+func (s int32Slice) Less(i, j int) bool { return s[i] < s[j] }
+func (s int32Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+
+// writeExtensions writes all the extensions in pv.
+// pv is assumed to be a pointer to a protocol message struct that is extendable.
+func (tm *TextMarshaler) writeExtensions(w *textWriter, pv reflect.Value) error {
+	emap := extensionMaps[pv.Type().Elem()]
+	ep, _ := extendable(pv.Interface())
+
+	// Order the extensions by ID.
+	// This isn't strictly necessary, but it will give us
+	// canonical output, which will also make testing easier.
+	m, mu := ep.extensionsRead()
+	if m == nil {
+		return nil
+	}
+	mu.Lock()
+	ids := make([]int32, 0, len(m))
+	for id := range m {
+		ids = append(ids, id)
+	}
+	sort.Sort(int32Slice(ids))
+	mu.Unlock()
+
+	for _, extNum := range ids {
+		ext := m[extNum]
+		var desc *ExtensionDesc
+		if emap != nil {
+			desc = emap[extNum]
+		}
+		if desc == nil {
+			// Unknown extension.
+			if err := writeUnknownStruct(w, ext.enc); err != nil {
+				return err
+			}
+			continue
+		}
+
+		pb, err := GetExtension(ep, desc)
+		if err != nil {
+			return fmt.Errorf("failed getting extension: %v", err)
+		}
+
+		// Repeated extensions will appear as a slice.
