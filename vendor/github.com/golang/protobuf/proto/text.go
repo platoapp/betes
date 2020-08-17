@@ -726,3 +726,129 @@ func (tm *TextMarshaler) writeExtensions(w *textWriter, pv reflect.Value) error 
 		}
 
 		// Repeated extensions will appear as a slice.
+		if !desc.repeated() {
+			if err := tm.writeExtension(w, desc.Name, pb); err != nil {
+				return err
+			}
+		} else {
+			v := reflect.ValueOf(pb)
+			for i := 0; i < v.Len(); i++ {
+				if err := tm.writeExtension(w, desc.Name, v.Index(i).Interface()); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (tm *TextMarshaler) writeExtension(w *textWriter, name string, pb interface{}) error {
+	if _, err := fmt.Fprintf(w, "[%s]:", name); err != nil {
+		return err
+	}
+	if !w.compact {
+		if err := w.WriteByte(' '); err != nil {
+			return err
+		}
+	}
+	if err := tm.writeAny(w, reflect.ValueOf(pb), nil); err != nil {
+		return err
+	}
+	if err := w.WriteByte('\n'); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (w *textWriter) writeIndent() {
+	if !w.complete {
+		return
+	}
+	remain := w.ind * 2
+	for remain > 0 {
+		n := remain
+		if n > len(spaces) {
+			n = len(spaces)
+		}
+		w.w.Write(spaces[:n])
+		remain -= n
+	}
+	w.complete = false
+}
+
+// TextMarshaler is a configurable text format marshaler.
+type TextMarshaler struct {
+	Compact   bool // use compact text format (one line).
+	ExpandAny bool // expand google.protobuf.Any messages of known types
+}
+
+// Marshal writes a given protocol buffer in text format.
+// The only errors returned are from w.
+func (tm *TextMarshaler) Marshal(w io.Writer, pb Message) error {
+	val := reflect.ValueOf(pb)
+	if pb == nil || val.IsNil() {
+		w.Write([]byte("<nil>"))
+		return nil
+	}
+	var bw *bufio.Writer
+	ww, ok := w.(writer)
+	if !ok {
+		bw = bufio.NewWriter(w)
+		ww = bw
+	}
+	aw := &textWriter{
+		w:        ww,
+		complete: true,
+		compact:  tm.Compact,
+	}
+
+	if etm, ok := pb.(encoding.TextMarshaler); ok {
+		text, err := etm.MarshalText()
+		if err != nil {
+			return err
+		}
+		if _, err = aw.Write(text); err != nil {
+			return err
+		}
+		if bw != nil {
+			return bw.Flush()
+		}
+		return nil
+	}
+	// Dereference the received pointer so we don't have outer < and >.
+	v := reflect.Indirect(val)
+	if err := tm.writeStruct(aw, v); err != nil {
+		return err
+	}
+	if bw != nil {
+		return bw.Flush()
+	}
+	return nil
+}
+
+// Text is the same as Marshal, but returns the string directly.
+func (tm *TextMarshaler) Text(pb Message) string {
+	var buf bytes.Buffer
+	tm.Marshal(&buf, pb)
+	return buf.String()
+}
+
+var (
+	defaultTextMarshaler = TextMarshaler{}
+	compactTextMarshaler = TextMarshaler{Compact: true}
+)
+
+// TODO: consider removing some of the Marshal functions below.
+
+// MarshalText writes a given protocol buffer in text format.
+// The only errors returned are from w.
+func MarshalText(w io.Writer, pb Message) error { return defaultTextMarshaler.Marshal(w, pb) }
+
+// MarshalTextString is the same as MarshalText, but returns the string directly.
+func MarshalTextString(pb Message) string { return defaultTextMarshaler.Text(pb) }
+
+// CompactText writes a given protocol buffer in compact text format (one line).
+func CompactText(w io.Writer, pb Message) error { return compactTextMarshaler.Marshal(w, pb) }
+
+// CompactTextString is the same as CompactText, but returns the string directly.
+func CompactTextString(pb Message) string { return compactTextMarshaler.Text(pb) }
