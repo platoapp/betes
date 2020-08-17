@@ -428,4 +428,153 @@ func (tm *TextMarshaler) writeStruct(w *textWriter, sv reflect.Value) error {
 			}
 		}
 
-		if err := writeName(w, props)
+		if err := writeName(w, props); err != nil {
+			return err
+		}
+		if !w.compact {
+			if err := w.WriteByte(' '); err != nil {
+				return err
+			}
+		}
+		if b, ok := fv.Interface().(raw); ok {
+			if err := writeRaw(w, b.Bytes()); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// Enums have a String method, so writeAny will work fine.
+		if err := tm.writeAny(w, fv, props); err != nil {
+			return err
+		}
+
+		if err := w.WriteByte('\n'); err != nil {
+			return err
+		}
+	}
+
+	// Extensions (the XXX_extensions field).
+	pv := sv.Addr()
+	if _, ok := extendable(pv.Interface()); ok {
+		if err := tm.writeExtensions(w, pv); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// writeRaw writes an uninterpreted raw message.
+func writeRaw(w *textWriter, b []byte) error {
+	if err := w.WriteByte('<'); err != nil {
+		return err
+	}
+	if !w.compact {
+		if err := w.WriteByte('\n'); err != nil {
+			return err
+		}
+	}
+	w.indent()
+	if err := writeUnknownStruct(w, b); err != nil {
+		return err
+	}
+	w.unindent()
+	if err := w.WriteByte('>'); err != nil {
+		return err
+	}
+	return nil
+}
+
+// writeAny writes an arbitrary field.
+func (tm *TextMarshaler) writeAny(w *textWriter, v reflect.Value, props *Properties) error {
+	v = reflect.Indirect(v)
+
+	// Floats have special cases.
+	if v.Kind() == reflect.Float32 || v.Kind() == reflect.Float64 {
+		x := v.Float()
+		var b []byte
+		switch {
+		case math.IsInf(x, 1):
+			b = posInf
+		case math.IsInf(x, -1):
+			b = negInf
+		case math.IsNaN(x):
+			b = nan
+		}
+		if b != nil {
+			_, err := w.Write(b)
+			return err
+		}
+		// Other values are handled below.
+	}
+
+	// We don't attempt to serialise every possible value type; only those
+	// that can occur in protocol buffers.
+	switch v.Kind() {
+	case reflect.Slice:
+		// Should only be a []byte; repeated fields are handled in writeStruct.
+		if err := writeString(w, string(v.Bytes())); err != nil {
+			return err
+		}
+	case reflect.String:
+		if err := writeString(w, v.String()); err != nil {
+			return err
+		}
+	case reflect.Struct:
+		// Required/optional group/message.
+		var bra, ket byte = '<', '>'
+		if props != nil && props.Wire == "group" {
+			bra, ket = '{', '}'
+		}
+		if err := w.WriteByte(bra); err != nil {
+			return err
+		}
+		if !w.compact {
+			if err := w.WriteByte('\n'); err != nil {
+				return err
+			}
+		}
+		w.indent()
+		if etm, ok := v.Interface().(encoding.TextMarshaler); ok {
+			text, err := etm.MarshalText()
+			if err != nil {
+				return err
+			}
+			if _, err = w.Write(text); err != nil {
+				return err
+			}
+		} else if err := tm.writeStruct(w, v); err != nil {
+			return err
+		}
+		w.unindent()
+		if err := w.WriteByte(ket); err != nil {
+			return err
+		}
+	default:
+		_, err := fmt.Fprint(w, v.Interface())
+		return err
+	}
+	return nil
+}
+
+// equivalent to C's isprint.
+func isprint(c byte) bool {
+	return c >= 0x20 && c < 0x7f
+}
+
+// writeString writes a string in the protocol buffer text format.
+// It is similar to strconv.Quote except we don't use Go escape sequences,
+// we treat the string as a byte sequence, and we use octal escapes.
+// These differences are to maintain interoperability with the other
+// languages' implementations of the text format.
+func writeString(w *textWriter, s string) error {
+	// use WriteByte here to get any needed indent
+	if err := w.WriteByte('"'); err != nil {
+		return err
+	}
+	// Loop over the bytes, not the runes.
+	for i := 0; i < len(s); i++ {
+		var err error
+		// Divergence from C++: we don't escape apostrophes.
+		// There's no need to escape them, and the C++ parser
+		// copes 
