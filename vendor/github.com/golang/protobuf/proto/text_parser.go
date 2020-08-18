@@ -349,3 +349,548 @@ func (p *textParser) next() *token {
 		// Look for multiple quoted strings separated by whitespace,
 		// and concatenate them.
 		cat := p.cur
+		for {
+			p.skipWhitespace()
+			if p.done || !isQuote(p.s[0]) {
+				break
+			}
+			p.advance()
+			if p.cur.err != nil {
+				return &p.cur
+			}
+			cat.value += " " + p.cur.value
+			cat.unquoted += p.cur.unquoted
+		}
+		p.done = false // parser may have seen EOF, but we want to return cat
+		p.cur = cat
+	}
+	return &p.cur
+}
+
+func (p *textParser) consumeToken(s string) error {
+	tok := p.next()
+	if tok.err != nil {
+		return tok.err
+	}
+	if tok.value != s {
+		p.back()
+		return p.errorf("expected %q, found %q", s, tok.value)
+	}
+	return nil
+}
+
+// Return a RequiredNotSetError indicating which required field was not set.
+func (p *textParser) missingRequiredFieldError(sv reflect.Value) *RequiredNotSetError {
+	st := sv.Type()
+	sprops := GetProperties(st)
+	for i := 0; i < st.NumField(); i++ {
+		if !isNil(sv.Field(i)) {
+			continue
+		}
+
+		props := sprops.Prop[i]
+		if props.Required {
+			return &RequiredNotSetError{fmt.Sprintf("%v.%v", st, props.OrigName)}
+		}
+	}
+	return &RequiredNotSetError{fmt.Sprintf("%v.<unknown field name>", st)} // should not happen
+}
+
+// Returns the index in the struct for the named field, as well as the parsed tag properties.
+func structFieldByName(sprops *StructProperties, name string) (int, *Properties, bool) {
+	i, ok := sprops.decoderOrigNames[name]
+	if ok {
+		return i, sprops.Prop[i], true
+	}
+	return -1, nil, false
+}
+
+// Consume a ':' from the input stream (if the next token is a colon),
+// returning an error if a colon is needed but not present.
+func (p *textParser) checkForColon(props *Properties, typ reflect.Type) *ParseError {
+	tok := p.next()
+	if tok.err != nil {
+		return tok.err
+	}
+	if tok.value != ":" {
+		// Colon is optional when the field is a group or message.
+		needColon := true
+		switch props.Wire {
+		case "group":
+			needColon = false
+		case "bytes":
+			// A "bytes" field is either a message, a string, or a repeated field;
+			// those three become *T, *string and []T respectively, so we can check for
+			// this field being a pointer to a non-string.
+			if typ.Kind() == reflect.Ptr {
+				// *T or *string
+				if typ.Elem().Kind() == reflect.String {
+					break
+				}
+			} else if typ.Kind() == reflect.Slice {
+				// []T or []*T
+				if typ.Elem().Kind() != reflect.Ptr {
+					break
+				}
+			} else if typ.Kind() == reflect.String {
+				// The proto3 exception is for a string field,
+				// which requires a colon.
+				break
+			}
+			needColon = false
+		}
+		if needColon {
+			return p.errorf("expected ':', found %q", tok.value)
+		}
+		p.back()
+	}
+	return nil
+}
+
+func (p *textParser) readStruct(sv reflect.Value, terminator string) error {
+	st := sv.Type()
+	sprops := GetProperties(st)
+	reqCount := sprops.reqCount
+	var reqFieldErr error
+	fieldSet := make(map[string]bool)
+	// A struct is a sequence of "name: value", terminated by one of
+	// '>' or '}', or the end of the input.  A name may also be
+	// "[extension]" or "[type/url]".
+	//
+	// The whole struct can also be an expanded Any message, like:
+	// [type/url] < ... struct contents ... >
+	for {
+		tok := p.next()
+		if tok.err != nil {
+			return tok.err
+		}
+		if tok.value == terminator {
+			break
+		}
+		if tok.value == "[" {
+			// Looks like an extension or an Any.
+			//
+			// TODO: Check whether we need to handle
+			// namespace rooted names (e.g. ".something.Foo").
+			extName, err := p.consumeExtName()
+			if err != nil {
+				return err
+			}
+
+			if s := strings.LastIndex(extName, "/"); s >= 0 {
+				// If it contains a slash, it's an Any type URL.
+				messageName := extName[s+1:]
+				mt := MessageType(messageName)
+				if mt == nil {
+					return p.errorf("unrecognized message %q in google.protobuf.Any", messageName)
+				}
+				tok = p.next()
+				if tok.err != nil {
+					return tok.err
+				}
+				// consume an optional colon
+				if tok.value == ":" {
+					tok = p.next()
+					if tok.err != nil {
+						return tok.err
+					}
+				}
+				var terminator string
+				switch tok.value {
+				case "<":
+					terminator = ">"
+				case "{":
+					terminator = "}"
+				default:
+					return p.errorf("expected '{' or '<', found %q", tok.value)
+				}
+				v := reflect.New(mt.Elem())
+				if pe := p.readStruct(v.Elem(), terminator); pe != nil {
+					return pe
+				}
+				b, err := Marshal(v.Interface().(Message))
+				if err != nil {
+					return p.errorf("failed to marshal message of type %q: %v", messageName, err)
+				}
+				if fieldSet["type_url"] {
+					return p.errorf(anyRepeatedlyUnpacked, "type_url")
+				}
+				if fieldSet["value"] {
+					return p.errorf(anyRepeatedlyUnpacked, "value")
+				}
+				sv.FieldByName("TypeUrl").SetString(extName)
+				sv.FieldByName("Value").SetBytes(b)
+				fieldSet["type_url"] = true
+				fieldSet["value"] = true
+				continue
+			}
+
+			var desc *ExtensionDesc
+			// This could be faster, but it's functional.
+			// TODO: Do something smarter than a linear scan.
+			for _, d := range RegisteredExtensions(reflect.New(st).Interface().(Message)) {
+				if d.Name == extName {
+					desc = d
+					break
+				}
+			}
+			if desc == nil {
+				return p.errorf("unrecognized extension %q", extName)
+			}
+
+			props := &Properties{}
+			props.Parse(desc.Tag)
+
+			typ := reflect.TypeOf(desc.ExtensionType)
+			if err := p.checkForColon(props, typ); err != nil {
+				return err
+			}
+
+			rep := desc.repeated()
+
+			// Read the extension structure, and set it in
+			// the value we're constructing.
+			var ext reflect.Value
+			if !rep {
+				ext = reflect.New(typ).Elem()
+			} else {
+				ext = reflect.New(typ.Elem()).Elem()
+			}
+			if err := p.readAny(ext, props); err != nil {
+				if _, ok := err.(*RequiredNotSetError); !ok {
+					return err
+				}
+				reqFieldErr = err
+			}
+			ep := sv.Addr().Interface().(Message)
+			if !rep {
+				SetExtension(ep, desc, ext.Interface())
+			} else {
+				old, err := GetExtension(ep, desc)
+				var sl reflect.Value
+				if err == nil {
+					sl = reflect.ValueOf(old) // existing slice
+				} else {
+					sl = reflect.MakeSlice(typ, 0, 1)
+				}
+				sl = reflect.Append(sl, ext)
+				SetExtension(ep, desc, sl.Interface())
+			}
+			if err := p.consumeOptionalSeparator(); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// This is a normal, non-extension field.
+		name := tok.value
+		var dst reflect.Value
+		fi, props, ok := structFieldByName(sprops, name)
+		if ok {
+			dst = sv.Field(fi)
+		} else if oop, ok := sprops.OneofTypes[name]; ok {
+			// It is a oneof.
+			props = oop.Prop
+			nv := reflect.New(oop.Type.Elem())
+			dst = nv.Elem().Field(0)
+			field := sv.Field(oop.Field)
+			if !field.IsNil() {
+				return p.errorf("field '%s' would overwrite already parsed oneof '%s'", name, sv.Type().Field(oop.Field).Name)
+			}
+			field.Set(nv)
+		}
+		if !dst.IsValid() {
+			return p.errorf("unknown field name %q in %v", name, st)
+		}
+
+		if dst.Kind() == reflect.Map {
+			// Consume any colon.
+			if err := p.checkForColon(props, dst.Type()); err != nil {
+				return err
+			}
+
+			// Construct the map if it doesn't already exist.
+			if dst.IsNil() {
+				dst.Set(reflect.MakeMap(dst.Type()))
+			}
+			key := reflect.New(dst.Type().Key()).Elem()
+			val := reflect.New(dst.Type().Elem()).Elem()
+
+			// The map entry should be this sequence of tokens:
+			//	< key : KEY value : VALUE >
+			// However, implementations may omit key or value, and technically
+			// we should support them in any order.  See b/28924776 for a time
+			// this went wrong.
+
+			tok := p.next()
+			var terminator string
+			switch tok.value {
+			case "<":
+				terminator = ">"
+			case "{":
+				terminator = "}"
+			default:
+				return p.errorf("expected '{' or '<', found %q", tok.value)
+			}
+			for {
+				tok := p.next()
+				if tok.err != nil {
+					return tok.err
+				}
+				if tok.value == terminator {
+					break
+				}
+				switch tok.value {
+				case "key":
+					if err := p.consumeToken(":"); err != nil {
+						return err
+					}
+					if err := p.readAny(key, props.mkeyprop); err != nil {
+						return err
+					}
+					if err := p.consumeOptionalSeparator(); err != nil {
+						return err
+					}
+				case "value":
+					if err := p.checkForColon(props.mvalprop, dst.Type().Elem()); err != nil {
+						return err
+					}
+					if err := p.readAny(val, props.mvalprop); err != nil {
+						return err
+					}
+					if err := p.consumeOptionalSeparator(); err != nil {
+						return err
+					}
+				default:
+					p.back()
+					return p.errorf(`expected "key", "value", or %q, found %q`, terminator, tok.value)
+				}
+			}
+
+			dst.SetMapIndex(key, val)
+			continue
+		}
+
+		// Check that it's not already set if it's not a repeated field.
+		if !props.Repeated && fieldSet[name] {
+			return p.errorf("non-repeated field %q was repeated", name)
+		}
+
+		if err := p.checkForColon(props, dst.Type()); err != nil {
+			return err
+		}
+
+		// Parse into the field.
+		fieldSet[name] = true
+		if err := p.readAny(dst, props); err != nil {
+			if _, ok := err.(*RequiredNotSetError); !ok {
+				return err
+			}
+			reqFieldErr = err
+		}
+		if props.Required {
+			reqCount--
+		}
+
+		if err := p.consumeOptionalSeparator(); err != nil {
+			return err
+		}
+
+	}
+
+	if reqCount > 0 {
+		return p.missingRequiredFieldError(sv)
+	}
+	return reqFieldErr
+}
+
+// consumeExtName consumes extension name or expanded Any type URL and the
+// following ']'. It returns the name or URL consumed.
+func (p *textParser) consumeExtName() (string, error) {
+	tok := p.next()
+	if tok.err != nil {
+		return "", tok.err
+	}
+
+	// If extension name or type url is quoted, it's a single token.
+	if len(tok.value) > 2 && isQuote(tok.value[0]) && tok.value[len(tok.value)-1] == tok.value[0] {
+		name, err := unquoteC(tok.value[1:len(tok.value)-1], rune(tok.value[0]))
+		if err != nil {
+			return "", err
+		}
+		return name, p.consumeToken("]")
+	}
+
+	// Consume everything up to "]"
+	var parts []string
+	for tok.value != "]" {
+		parts = append(parts, tok.value)
+		tok = p.next()
+		if tok.err != nil {
+			return "", p.errorf("unrecognized type_url or extension name: %s", tok.err)
+		}
+	}
+	return strings.Join(parts, ""), nil
+}
+
+// consumeOptionalSeparator consumes an optional semicolon or comma.
+// It is used in readStruct to provide backward compatibility.
+func (p *textParser) consumeOptionalSeparator() error {
+	tok := p.next()
+	if tok.err != nil {
+		return tok.err
+	}
+	if tok.value != ";" && tok.value != "," {
+		p.back()
+	}
+	return nil
+}
+
+func (p *textParser) readAny(v reflect.Value, props *Properties) error {
+	tok := p.next()
+	if tok.err != nil {
+		return tok.err
+	}
+	if tok.value == "" {
+		return p.errorf("unexpected EOF")
+	}
+
+	switch fv := v; fv.Kind() {
+	case reflect.Slice:
+		at := v.Type()
+		if at.Elem().Kind() == reflect.Uint8 {
+			// Special case for []byte
+			if tok.value[0] != '"' && tok.value[0] != '\'' {
+				// Deliberately written out here, as the error after
+				// this switch statement would write "invalid []byte: ...",
+				// which is not as user-friendly.
+				return p.errorf("invalid string: %v", tok.value)
+			}
+			bytes := []byte(tok.unquoted)
+			fv.Set(reflect.ValueOf(bytes))
+			return nil
+		}
+		// Repeated field.
+		if tok.value == "[" {
+			// Repeated field with list notation, like [1,2,3].
+			for {
+				fv.Set(reflect.Append(fv, reflect.New(at.Elem()).Elem()))
+				err := p.readAny(fv.Index(fv.Len()-1), props)
+				if err != nil {
+					return err
+				}
+				tok := p.next()
+				if tok.err != nil {
+					return tok.err
+				}
+				if tok.value == "]" {
+					break
+				}
+				if tok.value != "," {
+					return p.errorf("Expected ']' or ',' found %q", tok.value)
+				}
+			}
+			return nil
+		}
+		// One value of the repeated field.
+		p.back()
+		fv.Set(reflect.Append(fv, reflect.New(at.Elem()).Elem()))
+		return p.readAny(fv.Index(fv.Len()-1), props)
+	case reflect.Bool:
+		// true/1/t/True or false/f/0/False.
+		switch tok.value {
+		case "true", "1", "t", "True":
+			fv.SetBool(true)
+			return nil
+		case "false", "0", "f", "False":
+			fv.SetBool(false)
+			return nil
+		}
+	case reflect.Float32, reflect.Float64:
+		v := tok.value
+		// Ignore 'f' for compatibility with output generated by C++, but don't
+		// remove 'f' when the value is "-inf" or "inf".
+		if strings.HasSuffix(v, "f") && tok.value != "-inf" && tok.value != "inf" {
+			v = v[:len(v)-1]
+		}
+		if f, err := strconv.ParseFloat(v, fv.Type().Bits()); err == nil {
+			fv.SetFloat(f)
+			return nil
+		}
+	case reflect.Int32:
+		if x, err := strconv.ParseInt(tok.value, 0, 32); err == nil {
+			fv.SetInt(x)
+			return nil
+		}
+
+		if len(props.Enum) == 0 {
+			break
+		}
+		m, ok := enumValueMaps[props.Enum]
+		if !ok {
+			break
+		}
+		x, ok := m[tok.value]
+		if !ok {
+			break
+		}
+		fv.SetInt(int64(x))
+		return nil
+	case reflect.Int64:
+		if x, err := strconv.ParseInt(tok.value, 0, 64); err == nil {
+			fv.SetInt(x)
+			return nil
+		}
+
+	case reflect.Ptr:
+		// A basic field (indirected through pointer), or a repeated message/group
+		p.back()
+		fv.Set(reflect.New(fv.Type().Elem()))
+		return p.readAny(fv.Elem(), props)
+	case reflect.String:
+		if tok.value[0] == '"' || tok.value[0] == '\'' {
+			fv.SetString(tok.unquoted)
+			return nil
+		}
+	case reflect.Struct:
+		var terminator string
+		switch tok.value {
+		case "{":
+			terminator = "}"
+		case "<":
+			terminator = ">"
+		default:
+			return p.errorf("expected '{' or '<', found %q", tok.value)
+		}
+		// TODO: Handle nested messages which implement encoding.TextUnmarshaler.
+		return p.readStruct(fv, terminator)
+	case reflect.Uint32:
+		if x, err := strconv.ParseUint(tok.value, 0, 32); err == nil {
+			fv.SetUint(x)
+			return nil
+		}
+	case reflect.Uint64:
+		if x, err := strconv.ParseUint(tok.value, 0, 64); err == nil {
+			fv.SetUint(x)
+			return nil
+		}
+	}
+	return p.errorf("invalid %v: %v", v.Type(), tok.value)
+}
+
+// UnmarshalText reads a protocol buffer in Text format. UnmarshalText resets pb
+// before starting to unmarshal, so any existing data in pb is always removed.
+// If a required field is not set and no other error occurs,
+// UnmarshalText returns *RequiredNotSetError.
+func UnmarshalText(s string, pb Message) error {
+	if um, ok := pb.(encoding.TextUnmarshaler); ok {
+		err := um.UnmarshalText([]byte(s))
+		return err
+	}
+	pb.Reset()
+	v := reflect.ValueOf(pb)
+	if pe := newTextParser(s).readStruct(v.Elem(), ""); pe != nil {
+		return pe
+	}
+	return nil
+}
