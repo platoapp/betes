@@ -182,4 +182,161 @@ func (f *Fuzzer) Fuzz(obj interface{}) {
 // Intended for tests, so will panic on bad input or unimplemented fields.
 func (f *Fuzzer) FuzzNoCustom(obj interface{}) {
 	v := reflect.ValueOf(obj)
-	if v.K
+	if v.Kind() != reflect.Ptr {
+		panic("needed ptr!")
+	}
+	v = v.Elem()
+	f.fuzzWithContext(v, flagNoCustomFuzz)
+}
+
+const (
+	// Do not try to find a custom fuzz function.  Does not apply recursively.
+	flagNoCustomFuzz uint64 = 1 << iota
+)
+
+func (f *Fuzzer) fuzzWithContext(v reflect.Value, flags uint64) {
+	fc := &fuzzerContext{fuzzer: f}
+	fc.doFuzz(v, flags)
+}
+
+// fuzzerContext carries context about a single fuzzing run, which lets Fuzzer
+// be thread-safe.
+type fuzzerContext struct {
+	fuzzer   *Fuzzer
+	curDepth int
+}
+
+func (fc *fuzzerContext) doFuzz(v reflect.Value, flags uint64) {
+	if fc.curDepth >= fc.fuzzer.maxDepth {
+		return
+	}
+	fc.curDepth++
+	defer func() { fc.curDepth-- }()
+
+	if !v.CanSet() {
+		return
+	}
+
+	if flags&flagNoCustomFuzz == 0 {
+		// Check for both pointer and non-pointer custom functions.
+		if v.CanAddr() && fc.tryCustom(v.Addr()) {
+			return
+		}
+		if fc.tryCustom(v) {
+			return
+		}
+	}
+
+	if fn, ok := fillFuncMap[v.Kind()]; ok {
+		fn(v, fc.fuzzer.r)
+		return
+	}
+	switch v.Kind() {
+	case reflect.Map:
+		if fc.fuzzer.genShouldFill() {
+			v.Set(reflect.MakeMap(v.Type()))
+			n := fc.fuzzer.genElementCount()
+			for i := 0; i < n; i++ {
+				key := reflect.New(v.Type().Key()).Elem()
+				fc.doFuzz(key, 0)
+				val := reflect.New(v.Type().Elem()).Elem()
+				fc.doFuzz(val, 0)
+				v.SetMapIndex(key, val)
+			}
+			return
+		}
+		v.Set(reflect.Zero(v.Type()))
+	case reflect.Ptr:
+		if fc.fuzzer.genShouldFill() {
+			v.Set(reflect.New(v.Type().Elem()))
+			fc.doFuzz(v.Elem(), 0)
+			return
+		}
+		v.Set(reflect.Zero(v.Type()))
+	case reflect.Slice:
+		if fc.fuzzer.genShouldFill() {
+			n := fc.fuzzer.genElementCount()
+			v.Set(reflect.MakeSlice(v.Type(), n, n))
+			for i := 0; i < n; i++ {
+				fc.doFuzz(v.Index(i), 0)
+			}
+			return
+		}
+		v.Set(reflect.Zero(v.Type()))
+	case reflect.Array:
+		if fc.fuzzer.genShouldFill() {
+			n := v.Len()
+			for i := 0; i < n; i++ {
+				fc.doFuzz(v.Index(i), 0)
+			}
+			return
+		}
+		v.Set(reflect.Zero(v.Type()))
+	case reflect.Struct:
+		for i := 0; i < v.NumField(); i++ {
+			fc.doFuzz(v.Field(i), 0)
+		}
+	case reflect.Chan:
+		fallthrough
+	case reflect.Func:
+		fallthrough
+	case reflect.Interface:
+		fallthrough
+	default:
+		panic(fmt.Sprintf("Can't handle %#v", v.Interface()))
+	}
+}
+
+// tryCustom searches for custom handlers, and returns true iff it finds a match
+// and successfully randomizes v.
+func (fc *fuzzerContext) tryCustom(v reflect.Value) bool {
+	// First: see if we have a fuzz function for it.
+	doCustom, ok := fc.fuzzer.fuzzFuncs[v.Type()]
+	if !ok {
+		// Second: see if it can fuzz itself.
+		if v.CanInterface() {
+			intf := v.Interface()
+			if fuzzable, ok := intf.(Interface); ok {
+				fuzzable.Fuzz(Continue{fc: fc, Rand: fc.fuzzer.r})
+				return true
+			}
+		}
+		// Finally: see if there is a default fuzz function.
+		doCustom, ok = fc.fuzzer.defaultFuzzFuncs[v.Type()]
+		if !ok {
+			return false
+		}
+	}
+
+	switch v.Kind() {
+	case reflect.Ptr:
+		if v.IsNil() {
+			if !v.CanSet() {
+				return false
+			}
+			v.Set(reflect.New(v.Type().Elem()))
+		}
+	case reflect.Map:
+		if v.IsNil() {
+			if !v.CanSet() {
+				return false
+			}
+			v.Set(reflect.MakeMap(v.Type()))
+		}
+	default:
+		return false
+	}
+
+	doCustom.Call([]reflect.Value{v, reflect.ValueOf(Continue{
+		fc:   fc,
+		Rand: fc.fuzzer.r,
+	})})
+	return true
+}
+
+// Interface represents an object that knows how to fuzz itself.  Any time we
+// find a type that implements this interface we will delegate the act of
+// fuzzing itself.
+type Interface interface {
+	Fuzz(c Continue)
+}
