@@ -340,3 +340,128 @@ func (fc *fuzzerContext) tryCustom(v reflect.Value) bool {
 type Interface interface {
 	Fuzz(c Continue)
 }
+
+// Continue can be passed to custom fuzzing functions to allow them to use
+// the correct source of randomness and to continue fuzzing their members.
+type Continue struct {
+	fc *fuzzerContext
+
+	// For convenience, Continue implements rand.Rand via embedding.
+	// Use this for generating any randomness if you want your fuzzing
+	// to be repeatable for a given seed.
+	*rand.Rand
+}
+
+// Fuzz continues fuzzing obj. obj must be a pointer.
+func (c Continue) Fuzz(obj interface{}) {
+	v := reflect.ValueOf(obj)
+	if v.Kind() != reflect.Ptr {
+		panic("needed ptr!")
+	}
+	v = v.Elem()
+	c.fc.doFuzz(v, 0)
+}
+
+// FuzzNoCustom continues fuzzing obj, except that any custom fuzz function for
+// obj's type will not be called and obj will not be tested for fuzz.Interface
+// conformance.  This applies only to obj and not other instances of obj's
+// type.
+func (c Continue) FuzzNoCustom(obj interface{}) {
+	v := reflect.ValueOf(obj)
+	if v.Kind() != reflect.Ptr {
+		panic("needed ptr!")
+	}
+	v = v.Elem()
+	c.fc.doFuzz(v, flagNoCustomFuzz)
+}
+
+// RandString makes a random string up to 20 characters long. The returned string
+// may include a variety of (valid) UTF-8 encodings.
+func (c Continue) RandString() string {
+	return randString(c.Rand)
+}
+
+// RandUint64 makes random 64 bit numbers.
+// Weirdly, rand doesn't have a function that gives you 64 random bits.
+func (c Continue) RandUint64() uint64 {
+	return randUint64(c.Rand)
+}
+
+// RandBool returns true or false randomly.
+func (c Continue) RandBool() bool {
+	return randBool(c.Rand)
+}
+
+func fuzzInt(v reflect.Value, r *rand.Rand) {
+	v.SetInt(int64(randUint64(r)))
+}
+
+func fuzzUint(v reflect.Value, r *rand.Rand) {
+	v.SetUint(randUint64(r))
+}
+
+func fuzzTime(t *time.Time, c Continue) {
+	var sec, nsec int64
+	// Allow for about 1000 years of random time values, which keeps things
+	// like JSON parsing reasonably happy.
+	sec = c.Rand.Int63n(1000 * 365 * 24 * 60 * 60)
+	c.Fuzz(&nsec)
+	*t = time.Unix(sec, nsec)
+}
+
+var fillFuncMap = map[reflect.Kind]func(reflect.Value, *rand.Rand){
+	reflect.Bool: func(v reflect.Value, r *rand.Rand) {
+		v.SetBool(randBool(r))
+	},
+	reflect.Int:     fuzzInt,
+	reflect.Int8:    fuzzInt,
+	reflect.Int16:   fuzzInt,
+	reflect.Int32:   fuzzInt,
+	reflect.Int64:   fuzzInt,
+	reflect.Uint:    fuzzUint,
+	reflect.Uint8:   fuzzUint,
+	reflect.Uint16:  fuzzUint,
+	reflect.Uint32:  fuzzUint,
+	reflect.Uint64:  fuzzUint,
+	reflect.Uintptr: fuzzUint,
+	reflect.Float32: func(v reflect.Value, r *rand.Rand) {
+		v.SetFloat(float64(r.Float32()))
+	},
+	reflect.Float64: func(v reflect.Value, r *rand.Rand) {
+		v.SetFloat(r.Float64())
+	},
+	reflect.Complex64: func(v reflect.Value, r *rand.Rand) {
+		panic("unimplemented")
+	},
+	reflect.Complex128: func(v reflect.Value, r *rand.Rand) {
+		panic("unimplemented")
+	},
+	reflect.String: func(v reflect.Value, r *rand.Rand) {
+		v.SetString(randString(r))
+	},
+	reflect.UnsafePointer: func(v reflect.Value, r *rand.Rand) {
+		panic("unimplemented")
+	},
+}
+
+// randBool returns true or false randomly.
+func randBool(r *rand.Rand) bool {
+	if r.Int()&1 == 1 {
+		return true
+	}
+	return false
+}
+
+type charRange struct {
+	first, last rune
+}
+
+// choose returns a random unicode character from the given range, using the
+// given randomness source.
+func (r *charRange) choose(rand *rand.Rand) rune {
+	count := int64(r.last - r.first)
+	return r.first + rune(rand.Int63n(count))
+}
+
+var unicodeRanges = []charRange{
+	{' ', '~'},           // ASCII characters
