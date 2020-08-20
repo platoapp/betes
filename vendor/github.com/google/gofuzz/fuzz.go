@@ -465,3 +465,23 @@ func (r *charRange) choose(rand *rand.Rand) rune {
 
 var unicodeRanges = []charRange{
 	{' ', '~'},           // ASCII characters
+	{'\u00a0', '\u02af'}, // Multi-byte encoded characters
+	{'\u4e00', '\u9fff'}, // Common CJK (even longer encodings)
+}
+
+// randString makes a random string up to 20 characters long. The returned string
+// may include a variety of (valid) UTF-8 encodings.
+func randString(r *rand.Rand) string {
+	n := r.Intn(20)
+	runes := make([]rune, n)
+	for i := range runes {
+		runes[i] = unicodeRanges[r.Intn(len(unicodeRanges))].choose(r)
+	}
+	return string(runes)
+}
+
+// randUint64 makes random 64 bit numbers.
+// Weirdly, rand doesn't have a function that gives you 64 random bits.
+func randUint64(r *rand.Rand) uint64 {
+	return uint64(r.Uint32())<<32 | uint64(r.Uint32())
+}
