@@ -385,3 +385,793 @@ func (r *Lexer) scanToken() {
 
 	r.FetchToken()
 }
+
+// consume resets the current token to allow scanning the next one.
+func (r *Lexer) consume() {
+	r.token.kind = tokenUndef
+	r.token.delimValue = 0
+}
+
+// Ok returns true if no error (including io.EOF) was encountered during scanning.
+func (r *Lexer) Ok() bool {
+	return r.fatalError == nil
+}
+
+const maxErrorContextLen = 13
+
+func (r *Lexer) errParse(what string) {
+	if r.fatalError == nil {
+		var str string
+		if len(r.Data)-r.pos <= maxErrorContextLen {
+			str = string(r.Data)
+		} else {
+			str = string(r.Data[r.pos:r.pos+maxErrorContextLen-3]) + "..."
+		}
+		r.fatalError = &LexerError{
+			Reason: what,
+			Offset: r.pos,
+			Data:   str,
+		}
+	}
+}
+
+func (r *Lexer) errSyntax() {
+	r.errParse("syntax error")
+}
+
+func (r *Lexer) errInvalidToken(expected string) {
+	if r.fatalError != nil {
+		return
+	}
+	if r.UseMultipleErrors {
+		r.pos = r.start
+		r.consume()
+		r.SkipRecursive()
+		switch expected {
+		case "[":
+			r.token.delimValue = ']'
+			r.token.kind = tokenDelim
+		case "{":
+			r.token.delimValue = '}'
+			r.token.kind = tokenDelim
+		}
+		r.addNonfatalError(&LexerError{
+			Reason: fmt.Sprintf("expected %s", expected),
+			Offset: r.start,
+			Data:   string(r.Data[r.start:r.pos]),
+		})
+		return
+	}
+
+	var str string
+	if len(r.token.byteValue) <= maxErrorContextLen {
+		str = string(r.token.byteValue)
+	} else {
+		str = string(r.token.byteValue[:maxErrorContextLen-3]) + "..."
+	}
+	r.fatalError = &LexerError{
+		Reason: fmt.Sprintf("expected %s", expected),
+		Offset: r.pos,
+		Data:   str,
+	}
+}
+
+func (r *Lexer) GetPos() int {
+	return r.pos
+}
+
+// Delim consumes a token and verifies that it is the given delimiter.
+func (r *Lexer) Delim(c byte) {
+	if r.token.kind == tokenUndef && r.Ok() {
+		r.FetchToken()
+	}
+
+	if !r.Ok() || r.token.delimValue != c {
+		r.consume() // errInvalidToken can change token if UseMultipleErrors is enabled.
+		r.errInvalidToken(string([]byte{c}))
+	} else {
+		r.consume()
+	}
+}
+
+// IsDelim returns true if there was no scanning error and next token is the given delimiter.
+func (r *Lexer) IsDelim(c byte) bool {
+	if r.token.kind == tokenUndef && r.Ok() {
+		r.FetchToken()
+	}
+	return !r.Ok() || r.token.delimValue == c
+}
+
+// Null verifies that the next token is null and consumes it.
+func (r *Lexer) Null() {
+	if r.token.kind == tokenUndef && r.Ok() {
+		r.FetchToken()
+	}
+	if !r.Ok() || r.token.kind != tokenNull {
+		r.errInvalidToken("null")
+	}
+	r.consume()
+}
+
+// IsNull returns true if the next token is a null keyword.
+func (r *Lexer) IsNull() bool {
+	if r.token.kind == tokenUndef && r.Ok() {
+		r.FetchToken()
+	}
+	return r.Ok() && r.token.kind == tokenNull
+}
+
+// Skip skips a single token.
+func (r *Lexer) Skip() {
+	if r.token.kind == tokenUndef && r.Ok() {
+		r.FetchToken()
+	}
+	r.consume()
+}
+
+// SkipRecursive skips next array or object completely, or just skips a single token if not
+// an array/object.
+//
+// Note: no syntax validation is performed on the skipped data.
+func (r *Lexer) SkipRecursive() {
+	r.scanToken()
+	var start, end byte
+
+	if r.token.delimValue == '{' {
+		start, end = '{', '}'
+	} else if r.token.delimValue == '[' {
+		start, end = '[', ']'
+	} else {
+		r.consume()
+		return
+	}
+
+	r.consume()
+
+	level := 1
+	inQuotes := false
+	wasEscape := false
+
+	for i, c := range r.Data[r.pos:] {
+		switch {
+		case c == start && !inQuotes:
+			level++
+		case c == end && !inQuotes:
+			level--
+			if level == 0 {
+				r.pos += i + 1
+				return
+			}
+		case c == '\\' && inQuotes:
+			wasEscape = !wasEscape
+			continue
+		case c == '"' && inQuotes:
+			inQuotes = wasEscape
+		case c == '"':
+			inQuotes = true
+		}
+		wasEscape = false
+	}
+	r.pos = len(r.Data)
+	r.fatalError = &LexerError{
+		Reason: "EOF reached while skipping array/object or token",
+		Offset: r.pos,
+		Data:   string(r.Data[r.pos:]),
+	}
+}
+
+// Raw fetches the next item recursively as a data slice
+func (r *Lexer) Raw() []byte {
+	r.SkipRecursive()
+	if !r.Ok() {
+		return nil
+	}
+	return r.Data[r.start:r.pos]
+}
+
+// IsStart returns whether the lexer is positioned at the start
+// of an input string.
+func (r *Lexer) IsStart() bool {
+	return r.pos == 0
+}
+
+// Consumed reads all remaining bytes from the input, publishing an error if
+// there is anything but whitespace remaining.
+func (r *Lexer) Consumed() {
+	if r.pos > len(r.Data) || !r.Ok() {
+		return
+	}
+
+	for _, c := range r.Data[r.pos:] {
+		if c != ' ' && c != '\t' && c != '\r' && c != '\n' {
+			r.AddError(&LexerError{
+				Reason: "invalid character '" + string(c) + "' after top-level value",
+				Offset: r.pos,
+				Data:   string(r.Data[r.pos:]),
+			})
+			return
+		}
+
+		r.pos++
+		r.start++
+	}
+}
+
+func (r *Lexer) unsafeString() (string, []byte) {
+	if r.token.kind == tokenUndef && r.Ok() {
+		r.FetchToken()
+	}
+	if !r.Ok() || r.token.kind != tokenString {
+		r.errInvalidToken("string")
+		return "", nil
+	}
+	bytes := r.token.byteValue
+	ret := bytesToStr(r.token.byteValue)
+	r.consume()
+	return ret, bytes
+}
+
+// UnsafeString returns the string value if the token is a string literal.
+//
+// Warning: returned string may point to the input buffer, so the string should not outlive
+// the input buffer. Intended pattern of usage is as an argument to a switch statement.
+func (r *Lexer) UnsafeString() string {
+	ret, _ := r.unsafeString()
+	return ret
+}
+
+// UnsafeBytes returns the byte slice if the token is a string literal.
+func (r *Lexer) UnsafeBytes() []byte {
+	_, ret := r.unsafeString()
+	return ret
+}
+
+// String reads a string literal.
+func (r *Lexer) String() string {
+	if r.token.kind == tokenUndef && r.Ok() {
+		r.FetchToken()
+	}
+	if !r.Ok() || r.token.kind != tokenString {
+		r.errInvalidToken("string")
+		return ""
+	}
+	ret := string(r.token.byteValue)
+	r.consume()
+	return ret
+}
+
+// Bytes reads a string literal and base64 decodes it into a byte slice.
+func (r *Lexer) Bytes() []byte {
+	if r.token.kind == tokenUndef && r.Ok() {
+		r.FetchToken()
+	}
+	if !r.Ok() || r.token.kind != tokenString {
+		r.errInvalidToken("string")
+		return nil
+	}
+	ret := make([]byte, base64.StdEncoding.DecodedLen(len(r.token.byteValue)))
+	len, err := base64.StdEncoding.Decode(ret, r.token.byteValue)
+	if err != nil {
+		r.fatalError = &LexerError{
+			Reason: err.Error(),
+		}
+		return nil
+	}
+
+	r.consume()
+	return ret[:len]
+}
+
+// Bool reads a true or false boolean keyword.
+func (r *Lexer) Bool() bool {
+	if r.token.kind == tokenUndef && r.Ok() {
+		r.FetchToken()
+	}
+	if !r.Ok() || r.token.kind != tokenBool {
+		r.errInvalidToken("bool")
+		return false
+	}
+	ret := r.token.boolValue
+	r.consume()
+	return ret
+}
+
+func (r *Lexer) number() string {
+	if r.token.kind == tokenUndef && r.Ok() {
+		r.FetchToken()
+	}
+	if !r.Ok() || r.token.kind != tokenNumber {
+		r.errInvalidToken("number")
+		return ""
+	}
+	ret := bytesToStr(r.token.byteValue)
+	r.consume()
+	return ret
+}
+
+func (r *Lexer) Uint8() uint8 {
+	s := r.number()
+	if !r.Ok() {
+		return 0
+	}
+
+	n, err := strconv.ParseUint(s, 10, 8)
+	if err != nil {
+		r.addNonfatalError(&LexerError{
+			Offset: r.start,
+			Reason: err.Error(),
+			Data:   s,
+		})
+	}
+	return uint8(n)
+}
+
+func (r *Lexer) Uint16() uint16 {
+	s := r.number()
+	if !r.Ok() {
+		return 0
+	}
+
+	n, err := strconv.ParseUint(s, 10, 16)
+	if err != nil {
+		r.addNonfatalError(&LexerError{
+			Offset: r.start,
+			Reason: err.Error(),
+			Data:   s,
+		})
+	}
+	return uint16(n)
+}
+
+func (r *Lexer) Uint32() uint32 {
+	s := r.number()
+	if !r.Ok() {
+		return 0
+	}
+
+	n, err := strconv.ParseUint(s, 10, 32)
+	if err != nil {
+		r.addNonfatalError(&LexerError{
+			Offset: r.start,
+			Reason: err.Error(),
+			Data:   s,
+		})
+	}
+	return uint32(n)
+}
+
+func (r *Lexer) Uint64() uint64 {
+	s := r.number()
+	if !r.Ok() {
+		return 0
+	}
+
+	n, err := strconv.ParseUint(s, 10, 64)
+	if err != nil {
+		r.addNonfatalError(&LexerError{
+			Offset: r.start,
+			Reason: err.Error(),
+			Data:   s,
+		})
+	}
+	return n
+}
+
+func (r *Lexer) Uint() uint {
+	return uint(r.Uint64())
+}
+
+func (r *Lexer) Int8() int8 {
+	s := r.number()
+	if !r.Ok() {
+		return 0
+	}
+
+	n, err := strconv.ParseInt(s, 10, 8)
+	if err != nil {
+		r.addNonfatalError(&LexerError{
+			Offset: r.start,
+			Reason: err.Error(),
+			Data:   s,
+		})
+	}
+	return int8(n)
+}
+
+func (r *Lexer) Int16() int16 {
+	s := r.number()
+	if !r.Ok() {
+		return 0
+	}
+
+	n, err := strconv.ParseInt(s, 10, 16)
+	if err != nil {
+		r.addNonfatalError(&LexerError{
+			Offset: r.start,
+			Reason: err.Error(),
+			Data:   s,
+		})
+	}
+	return int16(n)
+}
+
+func (r *Lexer) Int32() int32 {
+	s := r.number()
+	if !r.Ok() {
+		return 0
+	}
+
+	n, err := strconv.ParseInt(s, 10, 32)
+	if err != nil {
+		r.addNonfatalError(&LexerError{
+			Offset: r.start,
+			Reason: err.Error(),
+			Data:   s,
+		})
+	}
+	return int32(n)
+}
+
+func (r *Lexer) Int64() int64 {
+	s := r.number()
+	if !r.Ok() {
+		return 0
+	}
+
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		r.addNonfatalError(&LexerError{
+			Offset: r.start,
+			Reason: err.Error(),
+			Data:   s,
+		})
+	}
+	return n
+}
+
+func (r *Lexer) Int() int {
+	return int(r.Int64())
+}
+
+func (r *Lexer) Uint8Str() uint8 {
+	s, b := r.unsafeString()
+	if !r.Ok() {
+		return 0
+	}
+
+	n, err := strconv.ParseUint(s, 10, 8)
+	if err != nil {
+		r.addNonfatalError(&LexerError{
+			Offset: r.start,
+			Reason: err.Error(),
+			Data:   string(b),
+		})
+	}
+	return uint8(n)
+}
+
+func (r *Lexer) Uint16Str() uint16 {
+	s, b := r.unsafeString()
+	if !r.Ok() {
+		return 0
+	}
+
+	n, err := strconv.ParseUint(s, 10, 16)
+	if err != nil {
+		r.addNonfatalError(&LexerError{
+			Offset: r.start,
+			Reason: err.Error(),
+			Data:   string(b),
+		})
+	}
+	return uint16(n)
+}
+
+func (r *Lexer) Uint32Str() uint32 {
+	s, b := r.unsafeString()
+	if !r.Ok() {
+		return 0
+	}
+
+	n, err := strconv.ParseUint(s, 10, 32)
+	if err != nil {
+		r.addNonfatalError(&LexerError{
+			Offset: r.start,
+			Reason: err.Error(),
+			Data:   string(b),
+		})
+	}
+	return uint32(n)
+}
+
+func (r *Lexer) Uint64Str() uint64 {
+	s, b := r.unsafeString()
+	if !r.Ok() {
+		return 0
+	}
+
+	n, err := strconv.ParseUint(s, 10, 64)
+	if err != nil {
+		r.addNonfatalError(&LexerError{
+			Offset: r.start,
+			Reason: err.Error(),
+			Data:   string(b),
+		})
+	}
+	return n
+}
+
+func (r *Lexer) UintStr() uint {
+	return uint(r.Uint64Str())
+}
+
+func (r *Lexer) UintptrStr() uintptr {
+	return uintptr(r.Uint64Str())
+}
+
+func (r *Lexer) Int8Str() int8 {
+	s, b := r.unsafeString()
+	if !r.Ok() {
+		return 0
+	}
+
+	n, err := strconv.ParseInt(s, 10, 8)
+	if err != nil {
+		r.addNonfatalError(&LexerError{
+			Offset: r.start,
+			Reason: err.Error(),
+			Data:   string(b),
+		})
+	}
+	return int8(n)
+}
+
+func (r *Lexer) Int16Str() int16 {
+	s, b := r.unsafeString()
+	if !r.Ok() {
+		return 0
+	}
+
+	n, err := strconv.ParseInt(s, 10, 16)
+	if err != nil {
+		r.addNonfatalError(&LexerError{
+			Offset: r.start,
+			Reason: err.Error(),
+			Data:   string(b),
+		})
+	}
+	return int16(n)
+}
+
+func (r *Lexer) Int32Str() int32 {
+	s, b := r.unsafeString()
+	if !r.Ok() {
+		return 0
+	}
+
+	n, err := strconv.ParseInt(s, 10, 32)
+	if err != nil {
+		r.addNonfatalError(&LexerError{
+			Offset: r.start,
+			Reason: err.Error(),
+			Data:   string(b),
+		})
+	}
+	return int32(n)
+}
+
+func (r *Lexer) Int64Str() int64 {
+	s, b := r.unsafeString()
+	if !r.Ok() {
+		return 0
+	}
+
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		r.addNonfatalError(&LexerError{
+			Offset: r.start,
+			Reason: err.Error(),
+			Data:   string(b),
+		})
+	}
+	return n
+}
+
+func (r *Lexer) IntStr() int {
+	return int(r.Int64Str())
+}
+
+func (r *Lexer) Float32() float32 {
+	s := r.number()
+	if !r.Ok() {
+		return 0
+	}
+
+	n, err := strconv.ParseFloat(s, 32)
+	if err != nil {
+		r.addNonfatalError(&LexerError{
+			Offset: r.start,
+			Reason: err.Error(),
+			Data:   s,
+		})
+	}
+	return float32(n)
+}
+
+func (r *Lexer) Float32Str() float32 {
+	s, b := r.unsafeString()
+	if !r.Ok() {
+		return 0
+	}
+	n, err := strconv.ParseFloat(s, 32)
+	if err != nil {
+		r.addNonfatalError(&LexerError{
+			Offset: r.start,
+			Reason: err.Error(),
+			Data:   string(b),
+		})
+	}
+	return float32(n)
+}
+
+func (r *Lexer) Float64() float64 {
+	s := r.number()
+	if !r.Ok() {
+		return 0
+	}
+
+	n, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		r.addNonfatalError(&LexerError{
+			Offset: r.start,
+			Reason: err.Error(),
+			Data:   s,
+		})
+	}
+	return n
+}
+
+func (r *Lexer) Float64Str() float64 {
+	s, b := r.unsafeString()
+	if !r.Ok() {
+		return 0
+	}
+	n, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		r.addNonfatalError(&LexerError{
+			Offset: r.start,
+			Reason: err.Error(),
+			Data:   string(b),
+		})
+	}
+	return n
+}
+
+func (r *Lexer) Error() error {
+	return r.fatalError
+}
+
+func (r *Lexer) AddError(e error) {
+	if r.fatalError == nil {
+		r.fatalError = e
+	}
+}
+
+func (r *Lexer) AddNonFatalError(e error) {
+	r.addNonfatalError(&LexerError{
+		Offset: r.start,
+		Data:   string(r.Data[r.start:r.pos]),
+		Reason: e.Error(),
+	})
+}
+
+func (r *Lexer) addNonfatalError(err *LexerError) {
+	if r.UseMultipleErrors {
+		// We don't want to add errors with the same offset.
+		if len(r.multipleErrors) != 0 && r.multipleErrors[len(r.multipleErrors)-1].Offset == err.Offset {
+			return
+		}
+		r.multipleErrors = append(r.multipleErrors, err)
+		return
+	}
+	r.fatalError = err
+}
+
+func (r *Lexer) GetNonFatalErrors() []*LexerError {
+	return r.multipleErrors
+}
+
+// JsonNumber fetches and json.Number from 'encoding/json' package.
+// Both int, float or string, contains them are valid values
+func (r *Lexer) JsonNumber() json.Number {
+	if r.token.kind == tokenUndef && r.Ok() {
+		r.FetchToken()
+	}
+	if !r.Ok() {
+		r.errInvalidToken("json.Number")
+		return json.Number("")
+	}
+
+	switch r.token.kind {
+	case tokenString:
+		return json.Number(r.String())
+	case tokenNumber:
+		return json.Number(r.Raw())
+	case tokenNull:
+		r.Null()
+		return json.Number("")
+	default:
+		r.errSyntax()
+		return json.Number("")
+	}
+}
+
+// Interface fetches an interface{} analogous to the 'encoding/json' package.
+func (r *Lexer) Interface() interface{} {
+	if r.token.kind == tokenUndef && r.Ok() {
+		r.FetchToken()
+	}
+
+	if !r.Ok() {
+		return nil
+	}
+	switch r.token.kind {
+	case tokenString:
+		return r.String()
+	case tokenNumber:
+		return r.Float64()
+	case tokenBool:
+		return r.Bool()
+	case tokenNull:
+		r.Null()
+		return nil
+	}
+
+	if r.token.delimValue == '{' {
+		r.consume()
+
+		ret := map[string]interface{}{}
+		for !r.IsDelim('}') {
+			key := r.String()
+			r.WantColon()
+			ret[key] = r.Interface()
+			r.WantComma()
+		}
+		r.Delim('}')
+
+		if r.Ok() {
+			return ret
+		} else {
+			return nil
+		}
+	} else if r.token.delimValue == '[' {
+		r.consume()
+
+		var ret []interface{}
+		for !r.IsDelim(']') {
+			ret = append(ret, r.Interface())
+			r.WantComma()
+		}
+		r.Delim(']')
+
+		if r.Ok() {
+			return ret
+		} else {
+			return nil
+		}
+	}
+	r.errSyntax()
+	return nil
+}
+
+// WantComma requires a comma to be present before fetching next token.
+func (r *Lexer) WantComma() {
+	r.wantSep = ','
+	r.firstElement = false
+}
+
+// WantColon requires a colon to be present before fetching next token.
+func (r *Lexer) WantColon() {
+	r.wantSep = ':'
+	r.firstElement = false
+}
