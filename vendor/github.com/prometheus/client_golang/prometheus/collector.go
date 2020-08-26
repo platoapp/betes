@@ -70,4 +70,6 @@ func (c *selfCollector) Describe(ch chan<- *Desc) {
 }
 
 // Collect implements Collector.
-func (c *selfColl
+func (c *selfCollector) Collect(ch chan<- Metric) {
+	ch <- c.self
+}
