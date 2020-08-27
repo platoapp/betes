@@ -209,4 +209,55 @@ func NewGoCollector() Collector {
 				desc: NewDesc(
 					memstatNamespace("last_gc_time_seconds"),
 					"Number of seconds since 1970 of last garbage collection.",
-					nil
+					nil, nil,
+				),
+				eval:    func(ms *runtime.MemStats) float64 { return float64(ms.LastGC) / 1e9 },
+				valType: GaugeValue,
+			},
+		},
+	}
+}
+
+func memstatNamespace(s string) string {
+	return fmt.Sprintf("go_memstats_%s", s)
+}
+
+// Describe returns all descriptions of the collector.
+func (c *goCollector) Describe(ch chan<- *Desc) {
+	ch <- c.goroutines.Desc()
+	ch <- c.gcDesc
+
+	for _, i := range c.metrics {
+		ch <- i.desc
+	}
+}
+
+// Collect returns the current state of all metrics of the collector.
+func (c *goCollector) Collect(ch chan<- Metric) {
+	c.goroutines.Set(float64(runtime.NumGoroutine()))
+	ch <- c.goroutines
+
+	var stats debug.GCStats
+	stats.PauseQuantiles = make([]time.Duration, 5)
+	debug.ReadGCStats(&stats)
+
+	quantiles := make(map[float64]float64)
+	for idx, pq := range stats.PauseQuantiles[1:] {
+		quantiles[float64(idx+1)/float64(len(stats.PauseQuantiles)-1)] = pq.Seconds()
+	}
+	quantiles[0.0] = stats.PauseQuantiles[0].Seconds()
+	ch <- MustNewConstSummary(c.gcDesc, uint64(stats.NumGC), float64(stats.PauseTotal.Seconds()), quantiles)
+
+	ms := &runtime.MemStats{}
+	runtime.ReadMemStats(ms)
+	for _, i := range c.metrics {
+		ch <- MustNewConstMetric(i.desc, i.valType, i.eval(ms))
+	}
+}
+
+// memStatsMetrics provide description, value, and value type for memstat metrics.
+type memStatsMetrics []struct {
+	desc    *Desc
+	eval    func(*runtime.MemStats) float64
+	valType ValueType
+}
