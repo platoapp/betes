@@ -167,4 +167,84 @@ func nowSeries(t ...time.Time) nower {
 // seconds.
 //
 // - The size of the request is calculated in a separate goroutine. Since this
-// calcula
+// calculator requires access to the request header, it creates a race with
+// any writes to the header performed during request handling.
+// httputil.ReverseProxy is a prominent example for a handler
+// performing such writes.
+//
+// Upcoming versions of this package will provide ways of instrumenting HTTP
+// handlers that are more flexible and have fewer issues. Please prefer direct
+// instrumentation in the meantime.
+func InstrumentHandler(handlerName string, handler http.Handler) http.HandlerFunc {
+	return InstrumentHandlerFunc(handlerName, handler.ServeHTTP)
+}
+
+// InstrumentHandlerFunc wraps the given function for instrumentation. It
+// otherwise works in the same way as InstrumentHandler (and shares the same
+// issues).
+//
+// Deprecated: InstrumentHandlerFunc is deprecated for the same reasons as
+// InstrumentHandler is.
+func InstrumentHandlerFunc(handlerName string, handlerFunc func(http.ResponseWriter, *http.Request)) http.HandlerFunc {
+	return InstrumentHandlerFuncWithOpts(
+		SummaryOpts{
+			Subsystem:   "http",
+			ConstLabels: Labels{"handler": handlerName},
+		},
+		handlerFunc,
+	)
+}
+
+// InstrumentHandlerWithOpts works like InstrumentHandler (and shares the same
+// issues) but provides more flexibility (at the cost of a more complex call
+// syntax). As InstrumentHandler, this function registers four metric
+// collectors, but it uses the provided SummaryOpts to create them. However, the
+// fields "Name" and "Help" in the SummaryOpts are ignored. "Name" is replaced
+// by "requests_total", "request_duration_microseconds", "request_size_bytes",
+// and "response_size_bytes", respectively. "Help" is replaced by an appropriate
+// help string. The names of the variable labels of the http_requests_total
+// CounterVec are "method" (get, post, etc.), and "code" (HTTP status code).
+//
+// If InstrumentHandlerWithOpts is called as follows, it mimics exactly the
+// behavior of InstrumentHandler:
+//
+//     prometheus.InstrumentHandlerWithOpts(
+//         prometheus.SummaryOpts{
+//              Subsystem:   "http",
+//              ConstLabels: prometheus.Labels{"handler": handlerName},
+//         },
+//         handler,
+//     )
+//
+// Technical detail: "requests_total" is a CounterVec, not a SummaryVec, so it
+// cannot use SummaryOpts. Instead, a CounterOpts struct is created internally,
+// and all its fields are set to the equally named fields in the provided
+// SummaryOpts.
+//
+// Deprecated: InstrumentHandlerWithOpts is deprecated for the same reasons as
+// InstrumentHandler is.
+func InstrumentHandlerWithOpts(opts SummaryOpts, handler http.Handler) http.HandlerFunc {
+	return InstrumentHandlerFuncWithOpts(opts, handler.ServeHTTP)
+}
+
+// InstrumentHandlerFuncWithOpts works like InstrumentHandlerFunc (and shares
+// the same issues) but provides more flexibility (at the cost of a more complex
+// call syntax). See InstrumentHandlerWithOpts for details how the provided
+// SummaryOpts are used.
+//
+// Deprecated: InstrumentHandlerFuncWithOpts is deprecated for the same reasons
+// as InstrumentHandler is.
+func InstrumentHandlerFuncWithOpts(opts SummaryOpts, handlerFunc func(http.ResponseWriter, *http.Request)) http.HandlerFunc {
+	reqCnt := NewCounterVec(
+		CounterOpts{
+			Namespace:   opts.Namespace,
+			Subsystem:   opts.Subsystem,
+			Name:        "requests_total",
+			Help:        "Total number of HTTP requests made.",
+			ConstLabels: opts.ConstLabels,
+		},
+		instLabels,
+	)
+
+	opts.Name = "request_duration_microseconds"
+	opts.Help = "The HTTP request latencies in microseconds."
