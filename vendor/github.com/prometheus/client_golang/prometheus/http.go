@@ -248,3 +248,157 @@ func InstrumentHandlerFuncWithOpts(opts SummaryOpts, handlerFunc func(http.Respo
 
 	opts.Name = "request_duration_microseconds"
 	opts.Help = "The HTTP request latencies in microseconds."
+	reqDur := NewSummary(opts)
+
+	opts.Name = "request_size_bytes"
+	opts.Help = "The HTTP request sizes in bytes."
+	reqSz := NewSummary(opts)
+
+	opts.Name = "response_size_bytes"
+	opts.Help = "The HTTP response sizes in bytes."
+	resSz := NewSummary(opts)
+
+	regReqCnt := MustRegisterOrGet(reqCnt).(*CounterVec)
+	regReqDur := MustRegisterOrGet(reqDur).(Summary)
+	regReqSz := MustRegisterOrGet(reqSz).(Summary)
+	regResSz := MustRegisterOrGet(resSz).(Summary)
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		now := time.Now()
+
+		delegate := &responseWriterDelegator{ResponseWriter: w}
+		out := make(chan int)
+		urlLen := 0
+		if r.URL != nil {
+			urlLen = len(r.URL.String())
+		}
+		go computeApproximateRequestSize(r, out, urlLen)
+
+		_, cn := w.(http.CloseNotifier)
+		_, fl := w.(http.Flusher)
+		_, hj := w.(http.Hijacker)
+		_, rf := w.(io.ReaderFrom)
+		var rw http.ResponseWriter
+		if cn && fl && hj && rf {
+			rw = &fancyResponseWriterDelegator{delegate}
+		} else {
+			rw = delegate
+		}
+		handlerFunc(rw, r)
+
+		elapsed := float64(time.Since(now)) / float64(time.Microsecond)
+
+		method := sanitizeMethod(r.Method)
+		code := sanitizeCode(delegate.status)
+		regReqCnt.WithLabelValues(method, code).Inc()
+		regReqDur.Observe(elapsed)
+		regResSz.Observe(float64(delegate.written))
+		regReqSz.Observe(float64(<-out))
+	})
+}
+
+func computeApproximateRequestSize(r *http.Request, out chan int, s int) {
+	s += len(r.Method)
+	s += len(r.Proto)
+	for name, values := range r.Header {
+		s += len(name)
+		for _, value := range values {
+			s += len(value)
+		}
+	}
+	s += len(r.Host)
+
+	// N.B. r.Form and r.MultipartForm are assumed to be included in r.URL.
+
+	if r.ContentLength != -1 {
+		s += int(r.ContentLength)
+	}
+	out <- s
+}
+
+type responseWriterDelegator struct {
+	http.ResponseWriter
+
+	handler, method string
+	status          int
+	written         int64
+	wroteHeader     bool
+}
+
+func (r *responseWriterDelegator) WriteHeader(code int) {
+	r.status = code
+	r.wroteHeader = true
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *responseWriterDelegator) Write(b []byte) (int, error) {
+	if !r.wroteHeader {
+		r.WriteHeader(http.StatusOK)
+	}
+	n, err := r.ResponseWriter.Write(b)
+	r.written += int64(n)
+	return n, err
+}
+
+type fancyResponseWriterDelegator struct {
+	*responseWriterDelegator
+}
+
+func (f *fancyResponseWriterDelegator) CloseNotify() <-chan bool {
+	return f.ResponseWriter.(http.CloseNotifier).CloseNotify()
+}
+
+func (f *fancyResponseWriterDelegator) Flush() {
+	f.ResponseWriter.(http.Flusher).Flush()
+}
+
+func (f *fancyResponseWriterDelegator) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return f.ResponseWriter.(http.Hijacker).Hijack()
+}
+
+func (f *fancyResponseWriterDelegator) ReadFrom(r io.Reader) (int64, error) {
+	if !f.wroteHeader {
+		f.WriteHeader(http.StatusOK)
+	}
+	n, err := f.ResponseWriter.(io.ReaderFrom).ReadFrom(r)
+	f.written += n
+	return n, err
+}
+
+func sanitizeMethod(m string) string {
+	switch m {
+	case "GET", "get":
+		return "get"
+	case "PUT", "put":
+		return "put"
+	case "HEAD", "head":
+		return "head"
+	case "POST", "post":
+		return "post"
+	case "DELETE", "delete":
+		return "delete"
+	case "CONNECT", "connect":
+		return "connect"
+	case "OPTIONS", "options":
+		return "options"
+	case "NOTIFY", "notify":
+		return "notify"
+	default:
+		return strings.ToLower(m)
+	}
+}
+
+func sanitizeCode(s int) string {
+	switch s {
+	case 100:
+		return "100"
+	case 101:
+		return "101"
+
+	case 200:
+		return "200"
+	case 201:
+		return "201"
+	case 202:
+		return "202"
+	c
