@@ -163,4 +163,39 @@ const (
 // Logger is the minimal interface HandlerOpts needs for logging. Note that
 // log.Logger from the standard library implements this interface, and it is
 // easy to implement by custom loggers, if they don't do so already anyway.
-type L
+type Logger interface {
+	Println(v ...interface{})
+}
+
+// HandlerOpts specifies options how to serve metrics via an http.Handler. The
+// zero value of HandlerOpts is a reasonable default.
+type HandlerOpts struct {
+	// ErrorLog specifies an optional logger for errors collecting and
+	// serving metrics. If nil, errors are not logged at all.
+	ErrorLog Logger
+	// ErrorHandling defines how errors are handled. Note that errors are
+	// logged regardless of the configured ErrorHandling provided ErrorLog
+	// is not nil.
+	ErrorHandling HandlerErrorHandling
+	// If DisableCompression is true, the handler will never compress the
+	// response, even if requested by the client.
+	DisableCompression bool
+}
+
+// decorateWriter wraps a writer to handle gzip compression if requested.  It
+// returns the decorated writer and the appropriate "Content-Encoding" header
+// (which is empty if no compression is enabled).
+func decorateWriter(request *http.Request, writer io.Writer, compressionDisabled bool) (io.Writer, string) {
+	if compressionDisabled {
+		return writer, ""
+	}
+	header := request.Header.Get(acceptEncodingHeader)
+	parts := strings.Split(header, ",")
+	for _, part := range parts {
+		part := strings.TrimSpace(part)
+		if part == "gzip" || strings.HasPrefix(part, "gzip;") {
+			return gzip.NewWriter(writer), "gzip"
+		}
+	}
+	return writer, ""
+}
