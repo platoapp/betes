@@ -128,4 +128,97 @@ type Gatherer interface {
 	// returned, the returned MetricFamily slice could be nil (in case of a
 	// fatal error that prevented any meaningful metric collection) or
 	// contain a number of MetricFamily protobufs, some of which might be
-	// incomplete, and some migh
+	// incomplete, and some might be missing altogether. The returned error
+	// (which might be a MultiError) explains the details. In scenarios
+	// where complete collection is critical, the returned MetricFamily
+	// protobufs should be disregarded if the returned error is non-nil.
+	Gather() ([]*dto.MetricFamily, error)
+}
+
+// Register registers the provided Collector with the DefaultRegisterer.
+//
+// Register is a shortcut for DefaultRegisterer.Register(c). See there for more
+// details.
+func Register(c Collector) error {
+	return DefaultRegisterer.Register(c)
+}
+
+// MustRegister registers the provided Collectors with the DefaultRegisterer and
+// panics if any error occurs.
+//
+// MustRegister is a shortcut for DefaultRegisterer.MustRegister(cs...). See
+// there for more details.
+func MustRegister(cs ...Collector) {
+	DefaultRegisterer.MustRegister(cs...)
+}
+
+// RegisterOrGet registers the provided Collector with the DefaultRegisterer and
+// returns the Collector, unless an equal Collector was registered before, in
+// which case that Collector is returned.
+//
+// Deprecated: RegisterOrGet is merely a convenience function for the
+// implementation as described in the documentation for
+// AlreadyRegisteredError. As the use case is relatively rare, this function
+// will be removed in a future version of this package to clean up the
+// namespace.
+func RegisterOrGet(c Collector) (Collector, error) {
+	if err := Register(c); err != nil {
+		if are, ok := err.(AlreadyRegisteredError); ok {
+			return are.ExistingCollector, nil
+		}
+		return nil, err
+	}
+	return c, nil
+}
+
+// MustRegisterOrGet behaves like RegisterOrGet but panics instead of returning
+// an error.
+//
+// Deprecated: This is deprecated for the same reason RegisterOrGet is. See
+// there for details.
+func MustRegisterOrGet(c Collector) Collector {
+	c, err := RegisterOrGet(c)
+	if err != nil {
+		panic(err)
+	}
+	return c
+}
+
+// Unregister removes the registration of the provided Collector from the
+// DefaultRegisterer.
+//
+// Unregister is a shortcut for DefaultRegisterer.Unregister(c). See there for
+// more details.
+func Unregister(c Collector) bool {
+	return DefaultRegisterer.Unregister(c)
+}
+
+// GathererFunc turns a function into a Gatherer.
+type GathererFunc func() ([]*dto.MetricFamily, error)
+
+// Gather implements Gatherer.
+func (gf GathererFunc) Gather() ([]*dto.MetricFamily, error) {
+	return gf()
+}
+
+// SetMetricFamilyInjectionHook replaces the DefaultGatherer with one that
+// gathers from the previous DefaultGatherers but then merges the MetricFamily
+// protobufs returned from the provided hook function with the MetricFamily
+// protobufs returned from the original DefaultGatherer.
+//
+// Deprecated: This function manipulates the DefaultGatherer variable. Consider
+// the implications, i.e. don't do this concurrently with any uses of the
+// DefaultGatherer. In the rare cases where you need to inject MetricFamily
+// protobufs directly, it is recommended to use a custom Registry and combine it
+// with a custom Gatherer using the Gatherers type (see
+// there). SetMetricFamilyInjectionHook only exists for compatibility reasons
+// with previous versions of this package.
+func SetMetricFamilyInjectionHook(hook func() []*dto.MetricFamily) {
+	DefaultGatherer = Gatherers{
+		DefaultGatherer,
+		GathererFunc(func() ([]*dto.MetricFamily, error) { return hook(), nil }),
+	}
+}
+
+// AlreadyRegisteredError is returned by the Register method if the Collector to
+// be registered has a
