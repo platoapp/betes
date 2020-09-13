@@ -560,4 +560,99 @@ func (r *Registry) Gather() ([]*dto.MetricFamily, error) {
 				continue
 			}
 		}
-		metric
+		metricFamily.Metric = append(metricFamily.Metric, dtoMetric)
+	}
+	return normalizeMetricFamilies(metricFamiliesByName), errs.MaybeUnwrap()
+}
+
+// Gatherers is a slice of Gatherer instances that implements the Gatherer
+// interface itself. Its Gather method calls Gather on all Gatherers in the
+// slice in order and returns the merged results. Errors returned from the
+// Gather calles are all returned in a flattened MultiError. Duplicate and
+// inconsistent Metrics are skipped (first occurrence in slice order wins) and
+// reported in the returned error.
+//
+// Gatherers can be used to merge the Gather results from multiple
+// Registries. It also provides a way to directly inject existing MetricFamily
+// protobufs into the gathering by creating a custom Gatherer with a Gather
+// method that simply returns the existing MetricFamily protobufs. Note that no
+// registration is involved (in contrast to Collector registration), so
+// obviously registration-time checks cannot happen. Any inconsistencies between
+// the gathered MetricFamilies are reported as errors by the Gather method, and
+// inconsistent Metrics are dropped. Invalid parts of the MetricFamilies
+// (e.g. syntactically invalid metric or label names) will go undetected.
+type Gatherers []Gatherer
+
+// Gather implements Gatherer.
+func (gs Gatherers) Gather() ([]*dto.MetricFamily, error) {
+	var (
+		metricFamiliesByName = map[string]*dto.MetricFamily{}
+		metricHashes         = map[uint64]struct{}{}
+		dimHashes            = map[string]uint64{}
+		errs                 MultiError // The collected errors to return in the end.
+	)
+
+	for i, g := range gs {
+		mfs, err := g.Gather()
+		if err != nil {
+			if multiErr, ok := err.(MultiError); ok {
+				for _, err := range multiErr {
+					errs = append(errs, fmt.Errorf("[from Gatherer #%d] %s", i+1, err))
+				}
+			} else {
+				errs = append(errs, fmt.Errorf("[from Gatherer #%d] %s", i+1, err))
+			}
+		}
+		for _, mf := range mfs {
+			existingMF, exists := metricFamiliesByName[mf.GetName()]
+			if exists {
+				if existingMF.GetHelp() != mf.GetHelp() {
+					errs = append(errs, fmt.Errorf(
+						"gathered metric family %s has help %q but should have %q",
+						mf.GetName(), mf.GetHelp(), existingMF.GetHelp(),
+					))
+					continue
+				}
+				if existingMF.GetType() != mf.GetType() {
+					errs = append(errs, fmt.Errorf(
+						"gathered metric family %s has type %s but should have %s",
+						mf.GetName(), mf.GetType(), existingMF.GetType(),
+					))
+					continue
+				}
+			} else {
+				existingMF = &dto.MetricFamily{}
+				existingMF.Name = mf.Name
+				existingMF.Help = mf.Help
+				existingMF.Type = mf.Type
+				metricFamiliesByName[mf.GetName()] = existingMF
+			}
+			for _, m := range mf.Metric {
+				if err := checkMetricConsistency(existingMF, m, metricHashes, dimHashes); err != nil {
+					errs = append(errs, err)
+					continue
+				}
+				existingMF.Metric = append(existingMF.Metric, m)
+			}
+		}
+	}
+	return normalizeMetricFamilies(metricFamiliesByName), errs.MaybeUnwrap()
+}
+
+// metricSorter is a sortable slice of *dto.Metric.
+type metricSorter []*dto.Metric
+
+func (s metricSorter) Len() int {
+	return len(s)
+}
+
+func (s metricSorter) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func (s metricSorter) Less(i, j int) bool {
+	if len(s[i].Label) != len(s[j].Label) {
+		// This should not happen. The metrics are
+		// inconsistent. However, we have to deal with the fact, as
+		// people might use custom collectors or metric family injection
+		// to create inconsistent metric
