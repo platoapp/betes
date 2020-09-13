@@ -318,4 +318,126 @@ func (r *Registry) Register(c Collector) error {
 		// Are all the label names and the help string consistent with
 		// previous descriptors of the same name?
 		// First check existing descriptors...
-		if dimHash, exists := r.dimHashesByName[desc.fqName]
+		if dimHash, exists := r.dimHashesByName[desc.fqName]; exists {
+			if dimHash != desc.dimHash {
+				return fmt.Errorf("a previously registered descriptor with the same fully-qualified name as %s has different label names or a different help string", desc)
+			}
+		} else {
+			// ...then check the new descriptors already seen.
+			if dimHash, exists := newDimHashesByName[desc.fqName]; exists {
+				if dimHash != desc.dimHash {
+					return fmt.Errorf("descriptors reported by collector have inconsistent label names or help strings for the same fully-qualified name, offender is %s", desc)
+				}
+			} else {
+				newDimHashesByName[desc.fqName] = desc.dimHash
+			}
+		}
+	}
+	// Did anything happen at all?
+	if len(newDescIDs) == 0 {
+		return errors.New("collector has no descriptors")
+	}
+	if existing, exists := r.collectorsByID[collectorID]; exists {
+		return AlreadyRegisteredError{
+			ExistingCollector: existing,
+			NewCollector:      c,
+		}
+	}
+	// If the collectorID is new, but at least one of the descs existed
+	// before, we are in trouble.
+	if duplicateDescErr != nil {
+		return duplicateDescErr
+	}
+
+	// Only after all tests have passed, actually register.
+	r.collectorsByID[collectorID] = c
+	for hash := range newDescIDs {
+		r.descIDs[hash] = struct{}{}
+	}
+	for name, dimHash := range newDimHashesByName {
+		r.dimHashesByName[name] = dimHash
+	}
+	return nil
+}
+
+// Unregister implements Registerer.
+func (r *Registry) Unregister(c Collector) bool {
+	var (
+		descChan    = make(chan *Desc, capDescChan)
+		descIDs     = map[uint64]struct{}{}
+		collectorID uint64 // Just a sum of the desc IDs.
+	)
+	go func() {
+		c.Describe(descChan)
+		close(descChan)
+	}()
+	for desc := range descChan {
+		if _, exists := descIDs[desc.id]; !exists {
+			collectorID += desc.id
+			descIDs[desc.id] = struct{}{}
+		}
+	}
+
+	r.mtx.RLock()
+	if _, exists := r.collectorsByID[collectorID]; !exists {
+		r.mtx.RUnlock()
+		return false
+	}
+	r.mtx.RUnlock()
+
+	r.mtx.Lock()
+	defer r.mtx.Unlock()
+
+	delete(r.collectorsByID, collectorID)
+	for id := range descIDs {
+		delete(r.descIDs, id)
+	}
+	// dimHashesByName is left untouched as those must be consistent
+	// throughout the lifetime of a program.
+	return true
+}
+
+// MustRegister implements Registerer.
+func (r *Registry) MustRegister(cs ...Collector) {
+	for _, c := range cs {
+		if err := r.Register(c); err != nil {
+			panic(err)
+		}
+	}
+}
+
+// Gather implements Gatherer.
+func (r *Registry) Gather() ([]*dto.MetricFamily, error) {
+	var (
+		metricChan        = make(chan Metric, capMetricChan)
+		metricHashes      = map[uint64]struct{}{}
+		dimHashes         = map[string]uint64{}
+		wg                sync.WaitGroup
+		errs              MultiError          // The collected errors to return in the end.
+		registeredDescIDs map[uint64]struct{} // Only used for pedantic checks
+	)
+
+	r.mtx.RLock()
+	metricFamiliesByName := make(map[string]*dto.MetricFamily, len(r.dimHashesByName))
+
+	// Scatter.
+	// (Collectors could be complex and slow, so we call them all at once.)
+	wg.Add(len(r.collectorsByID))
+	go func() {
+		wg.Wait()
+		close(metricChan)
+	}()
+	for _, collector := range r.collectorsByID {
+		go func(collector Collector) {
+			defer wg.Done()
+			collector.Collect(metricChan)
+		}(collector)
+	}
+
+	// In case pedantic checks are enabled, we have to copy the map before
+	// giving up the RLock.
+	if r.pedanticChecksEnabled {
+		registeredDescIDs = make(map[uint64]struct{}, len(r.descIDs))
+		for id := range r.descIDs {
+			registeredDescIDs[id] = struct{}{}
+		}
