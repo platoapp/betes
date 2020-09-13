@@ -221,4 +221,101 @@ func SetMetricFamilyInjectionHook(hook func() []*dto.MetricFamily) {
 }
 
 // AlreadyRegisteredError is returned by the Register method if the Collector to
-// be registered has a
+// be registered has already been registered before, or a different Collector
+// that collects the same metrics has been registered before. Registration fails
+// in that case, but you can detect from the kind of error what has
+// happened. The error contains fields for the existing Collector and the
+// (rejected) new Collector that equals the existing one. This can be used to
+// find out if an equal Collector has been registered before and switch over to
+// using the old one, as demonstrated in the example.
+type AlreadyRegisteredError struct {
+	ExistingCollector, NewCollector Collector
+}
+
+func (err AlreadyRegisteredError) Error() string {
+	return "duplicate metrics collector registration attempted"
+}
+
+// MultiError is a slice of errors implementing the error interface. It is used
+// by a Gatherer to report multiple errors during MetricFamily gathering.
+type MultiError []error
+
+func (errs MultiError) Error() string {
+	if len(errs) == 0 {
+		return ""
+	}
+	buf := &bytes.Buffer{}
+	fmt.Fprintf(buf, "%d error(s) occurred:", len(errs))
+	for _, err := range errs {
+		fmt.Fprintf(buf, "\n* %s", err)
+	}
+	return buf.String()
+}
+
+// MaybeUnwrap returns nil if len(errs) is 0. It returns the first and only
+// contained error as error if len(errs is 1). In all other cases, it returns
+// the MultiError directly. This is helpful for returning a MultiError in a way
+// that only uses the MultiError if needed.
+func (errs MultiError) MaybeUnwrap() error {
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errs[0]
+	default:
+		return errs
+	}
+}
+
+// Registry registers Prometheus collectors, collects their metrics, and gathers
+// them into MetricFamilies for exposition. It implements both Registerer and
+// Gatherer. The zero value is not usable. Create instances with NewRegistry or
+// NewPedanticRegistry.
+type Registry struct {
+	mtx                   sync.RWMutex
+	collectorsByID        map[uint64]Collector // ID is a hash of the descIDs.
+	descIDs               map[uint64]struct{}
+	dimHashesByName       map[string]uint64
+	pedanticChecksEnabled bool
+}
+
+// Register implements Registerer.
+func (r *Registry) Register(c Collector) error {
+	var (
+		descChan           = make(chan *Desc, capDescChan)
+		newDescIDs         = map[uint64]struct{}{}
+		newDimHashesByName = map[string]uint64{}
+		collectorID        uint64 // Just a sum of all desc IDs.
+		duplicateDescErr   error
+	)
+	go func() {
+		c.Describe(descChan)
+		close(descChan)
+	}()
+	r.mtx.Lock()
+	defer r.mtx.Unlock()
+	// Coduct various tests...
+	for desc := range descChan {
+
+		// Is the descriptor valid at all?
+		if desc.err != nil {
+			return fmt.Errorf("descriptor %s is invalid: %s", desc, desc.err)
+		}
+
+		// Is the descID unique?
+		// (In other words: Is the fqName + constLabel combination unique?)
+		if _, exists := r.descIDs[desc.id]; exists {
+			duplicateDescErr = fmt.Errorf("descriptor %s already exists with the same fully-qualified name and const label values", desc)
+		}
+		// If it is not a duplicate desc in this collector, add it to
+		// the collectorID.  (We allow duplicate descs within the same
+		// collector, but their existence must be a no-op.)
+		if _, exists := newDescIDs[desc.id]; !exists {
+			newDescIDs[desc.id] = struct{}{}
+			collectorID += desc.id
+		}
+
+		// Are all the label names and the help string consistent with
+		// previous descriptors of the same name?
+		// First check existing descriptors...
+		if dimHash, exists := r.dimHashesByName[desc.fqName]
