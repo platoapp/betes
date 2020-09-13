@@ -441,3 +441,123 @@ func (r *Registry) Gather() ([]*dto.MetricFamily, error) {
 		for id := range r.descIDs {
 			registeredDescIDs[id] = struct{}{}
 		}
+	}
+
+	r.mtx.RUnlock()
+
+	// Drain metricChan in case of premature return.
+	defer func() {
+		for _ = range metricChan {
+		}
+	}()
+
+	// Gather.
+	for metric := range metricChan {
+		// This could be done concurrently, too, but it required locking
+		// of metricFamiliesByName (and of metricHashes if checks are
+		// enabled). Most likely not worth it.
+		desc := metric.Desc()
+		dtoMetric := &dto.Metric{}
+		if err := metric.Write(dtoMetric); err != nil {
+			errs = append(errs, fmt.Errorf(
+				"error collecting metric %v: %s", desc, err,
+			))
+			continue
+		}
+		metricFamily, ok := metricFamiliesByName[desc.fqName]
+		if ok {
+			if metricFamily.GetHelp() != desc.help {
+				errs = append(errs, fmt.Errorf(
+					"collected metric %s %s has help %q but should have %q",
+					desc.fqName, dtoMetric, desc.help, metricFamily.GetHelp(),
+				))
+				continue
+			}
+			// TODO(beorn7): Simplify switch once Desc has type.
+			switch metricFamily.GetType() {
+			case dto.MetricType_COUNTER:
+				if dtoMetric.Counter == nil {
+					errs = append(errs, fmt.Errorf(
+						"collected metric %s %s should be a Counter",
+						desc.fqName, dtoMetric,
+					))
+					continue
+				}
+			case dto.MetricType_GAUGE:
+				if dtoMetric.Gauge == nil {
+					errs = append(errs, fmt.Errorf(
+						"collected metric %s %s should be a Gauge",
+						desc.fqName, dtoMetric,
+					))
+					continue
+				}
+			case dto.MetricType_SUMMARY:
+				if dtoMetric.Summary == nil {
+					errs = append(errs, fmt.Errorf(
+						"collected metric %s %s should be a Summary",
+						desc.fqName, dtoMetric,
+					))
+					continue
+				}
+			case dto.MetricType_UNTYPED:
+				if dtoMetric.Untyped == nil {
+					errs = append(errs, fmt.Errorf(
+						"collected metric %s %s should be Untyped",
+						desc.fqName, dtoMetric,
+					))
+					continue
+				}
+			case dto.MetricType_HISTOGRAM:
+				if dtoMetric.Histogram == nil {
+					errs = append(errs, fmt.Errorf(
+						"collected metric %s %s should be a Histogram",
+						desc.fqName, dtoMetric,
+					))
+					continue
+				}
+			default:
+				panic("encountered MetricFamily with invalid type")
+			}
+		} else {
+			metricFamily = &dto.MetricFamily{}
+			metricFamily.Name = proto.String(desc.fqName)
+			metricFamily.Help = proto.String(desc.help)
+			// TODO(beorn7): Simplify switch once Desc has type.
+			switch {
+			case dtoMetric.Gauge != nil:
+				metricFamily.Type = dto.MetricType_GAUGE.Enum()
+			case dtoMetric.Counter != nil:
+				metricFamily.Type = dto.MetricType_COUNTER.Enum()
+			case dtoMetric.Summary != nil:
+				metricFamily.Type = dto.MetricType_SUMMARY.Enum()
+			case dtoMetric.Untyped != nil:
+				metricFamily.Type = dto.MetricType_UNTYPED.Enum()
+			case dtoMetric.Histogram != nil:
+				metricFamily.Type = dto.MetricType_HISTOGRAM.Enum()
+			default:
+				errs = append(errs, fmt.Errorf(
+					"empty metric collected: %s", dtoMetric,
+				))
+				continue
+			}
+			metricFamiliesByName[desc.fqName] = metricFamily
+		}
+		if err := checkMetricConsistency(metricFamily, dtoMetric, metricHashes, dimHashes); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if r.pedanticChecksEnabled {
+			// Is the desc registered at all?
+			if _, exist := registeredDescIDs[desc.id]; !exist {
+				errs = append(errs, fmt.Errorf(
+					"collected metric %s %s with unregistered descriptor %s",
+					metricFamily.GetName(), dtoMetric, desc,
+				))
+				continue
+			}
+			if err := checkDescConsistency(metricFamily, dtoMetric, desc); err != nil {
+				errs = append(errs, err)
+				continue
+			}
+		}
+		metric
