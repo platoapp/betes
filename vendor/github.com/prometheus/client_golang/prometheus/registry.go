@@ -750,4 +750,57 @@ func checkMetricConsistency(
 			metricFamily.GetName(), dtoMetric,
 		)
 	}
-	
+	if dimHash, ok := dimHashes[metricFamily.GetName()]; ok {
+		if dimHash != dh {
+			return fmt.Errorf(
+				"collected metric %s %s has label dimensions inconsistent with previously collected metrics in the same metric family",
+				metricFamily.GetName(), dtoMetric,
+			)
+		}
+	} else {
+		dimHashes[metricFamily.GetName()] = dh
+	}
+	metricHashes[h] = struct{}{}
+	return nil
+}
+
+func checkDescConsistency(
+	metricFamily *dto.MetricFamily,
+	dtoMetric *dto.Metric,
+	desc *Desc,
+) error {
+	// Desc help consistency with metric family help.
+	if metricFamily.GetHelp() != desc.help {
+		return fmt.Errorf(
+			"collected metric %s %s has help %q but should have %q",
+			metricFamily.GetName(), dtoMetric, metricFamily.GetHelp(), desc.help,
+		)
+	}
+
+	// Is the desc consistent with the content of the metric?
+	lpsFromDesc := make([]*dto.LabelPair, 0, len(dtoMetric.Label))
+	lpsFromDesc = append(lpsFromDesc, desc.constLabelPairs...)
+	for _, l := range desc.variableLabels {
+		lpsFromDesc = append(lpsFromDesc, &dto.LabelPair{
+			Name: proto.String(l),
+		})
+	}
+	if len(lpsFromDesc) != len(dtoMetric.Label) {
+		return fmt.Errorf(
+			"labels in collected metric %s %s are inconsistent with descriptor %s",
+			metricFamily.GetName(), dtoMetric, desc,
+		)
+	}
+	sort.Sort(LabelPairSorter(lpsFromDesc))
+	for i, lpFromDesc := range lpsFromDesc {
+		lpFromMetric := dtoMetric.Label[i]
+		if lpFromDesc.GetName() != lpFromMetric.GetName() ||
+			lpFromDesc.Value != nil && lpFromDesc.GetValue() != lpFromMetric.GetValue() {
+			return fmt.Errorf(
+				"labels in collected metric %s %s are inconsistent with descriptor %s",
+				metricFamily.GetName(), dtoMetric, desc,
+			)
+		}
+	}
+	return nil
+}
