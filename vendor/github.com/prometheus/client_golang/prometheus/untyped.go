@@ -129,4 +129,10 @@ type UntypedFunc interface {
 // the case where an UntypedFunc is directly registered with Prometheus, the
 // provided function must be concurrency-safe.
 func NewUntypedFunc(opts UntypedOpts, function func() float64) UntypedFunc {
-	return newValueFunc(New
+	return newValueFunc(NewDesc(
+		BuildFQName(opts.Namespace, opts.Subsystem, opts.Name),
+		opts.Help,
+		nil,
+		opts.ConstLabels,
+	), UntypedValue, function)
+}
