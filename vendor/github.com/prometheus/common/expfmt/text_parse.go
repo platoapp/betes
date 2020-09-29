@@ -147,4 +147,110 @@ func (p *TextParser) startOfLine() stateFn {
 		p.err = nil
 		return nil
 	}
-	switch p.curre
+	switch p.currentByte {
+	case '#':
+		return p.startComment
+	case '\n':
+		return p.startOfLine // Empty line, start the next one.
+	}
+	return p.readingMetricName
+}
+
+// startComment represents the state where the next byte read from p.buf is the
+// start of a comment (or whitespace leading up to it).
+func (p *TextParser) startComment() stateFn {
+	if p.skipBlankTab(); p.err != nil {
+		return nil // Unexpected end of input.
+	}
+	if p.currentByte == '\n' {
+		return p.startOfLine
+	}
+	if p.readTokenUntilWhitespace(); p.err != nil {
+		return nil // Unexpected end of input.
+	}
+	// If we have hit the end of line already, there is nothing left
+	// to do. This is not considered a syntax error.
+	if p.currentByte == '\n' {
+		return p.startOfLine
+	}
+	keyword := p.currentToken.String()
+	if keyword != "HELP" && keyword != "TYPE" {
+		// Generic comment, ignore by fast forwarding to end of line.
+		for p.currentByte != '\n' {
+			if p.currentByte, p.err = p.buf.ReadByte(); p.err != nil {
+				return nil // Unexpected end of input.
+			}
+		}
+		return p.startOfLine
+	}
+	// There is something. Next has to be a metric name.
+	if p.skipBlankTab(); p.err != nil {
+		return nil // Unexpected end of input.
+	}
+	if p.readTokenAsMetricName(); p.err != nil {
+		return nil // Unexpected end of input.
+	}
+	if p.currentByte == '\n' {
+		// At the end of the line already.
+		// Again, this is not considered a syntax error.
+		return p.startOfLine
+	}
+	if !isBlankOrTab(p.currentByte) {
+		p.parseError("invalid metric name in comment")
+		return nil
+	}
+	p.setOrCreateCurrentMF()
+	if p.skipBlankTab(); p.err != nil {
+		return nil // Unexpected end of input.
+	}
+	if p.currentByte == '\n' {
+		// At the end of the line already.
+		// Again, this is not considered a syntax error.
+		return p.startOfLine
+	}
+	switch keyword {
+	case "HELP":
+		return p.readingHelp
+	case "TYPE":
+		return p.readingType
+	}
+	panic(fmt.Sprintf("code error: unexpected keyword %q", keyword))
+}
+
+// readingMetricName represents the state where the last byte read (now in
+// p.currentByte) is the first byte of a metric name.
+func (p *TextParser) readingMetricName() stateFn {
+	if p.readTokenAsMetricName(); p.err != nil {
+		return nil
+	}
+	if p.currentToken.Len() == 0 {
+		p.parseError("invalid metric name")
+		return nil
+	}
+	p.setOrCreateCurrentMF()
+	// Now is the time to fix the type if it hasn't happened yet.
+	if p.currentMF.Type == nil {
+		p.currentMF.Type = dto.MetricType_UNTYPED.Enum()
+	}
+	p.currentMetric = &dto.Metric{}
+	// Do not append the newly created currentMetric to
+	// currentMF.Metric right now. First wait if this is a summary,
+	// and the metric exists already, which we can only know after
+	// having read all the labels.
+	if p.skipBlankTabIfCurrentBlankTab(); p.err != nil {
+		return nil // Unexpected end of input.
+	}
+	return p.readingLabels
+}
+
+// readingLabels represents the state where the last byte read (now in
+// p.currentByte) is either the first byte of the label set (i.e. a '{'), or the
+// first byte of the value (otherwise).
+func (p *TextParser) readingLabels() stateFn {
+	// Summaries/histograms are special. We have to reset the
+	// currentLabels map, currentQuantile and currentBucket before starting to
+	// read labels.
+	if p.currentMF.GetType() == dto.MetricType_SUMMARY || p.currentMF.GetType() == dto.MetricType_HISTOGRAM {
+		p.currentLabels = map[string]string{}
+		p.currentLabels[string(model.MetricNameLabel)] = p.currentMF.GetName()
+		
