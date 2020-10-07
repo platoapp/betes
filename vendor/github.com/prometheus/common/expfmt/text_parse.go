@@ -253,4 +253,94 @@ func (p *TextParser) readingLabels() stateFn {
 	if p.currentMF.GetType() == dto.MetricType_SUMMARY || p.currentMF.GetType() == dto.MetricType_HISTOGRAM {
 		p.currentLabels = map[string]string{}
 		p.currentLabels[string(model.MetricNameLabel)] = p.currentMF.GetName()
-		
+		p.currentQuantile = math.NaN()
+		p.currentBucket = math.NaN()
+	}
+	if p.currentByte != '{' {
+		return p.readingValue
+	}
+	return p.startLabelName
+}
+
+// startLabelName represents the state where the next byte read from p.buf is
+// the start of a label name (or whitespace leading up to it).
+func (p *TextParser) startLabelName() stateFn {
+	if p.skipBlankTab(); p.err != nil {
+		return nil // Unexpected end of input.
+	}
+	if p.currentByte == '}' {
+		if p.skipBlankTab(); p.err != nil {
+			return nil // Unexpected end of input.
+		}
+		return p.readingValue
+	}
+	if p.readTokenAsLabelName(); p.err != nil {
+		return nil // Unexpected end of input.
+	}
+	if p.currentToken.Len() == 0 {
+		p.parseError(fmt.Sprintf("invalid label name for metric %q", p.currentMF.GetName()))
+		return nil
+	}
+	p.currentLabelPair = &dto.LabelPair{Name: proto.String(p.currentToken.String())}
+	if p.currentLabelPair.GetName() == string(model.MetricNameLabel) {
+		p.parseError(fmt.Sprintf("label name %q is reserved", model.MetricNameLabel))
+		return nil
+	}
+	// Special summary/histogram treatment. Don't add 'quantile' and 'le'
+	// labels to 'real' labels.
+	if !(p.currentMF.GetType() == dto.MetricType_SUMMARY && p.currentLabelPair.GetName() == model.QuantileLabel) &&
+		!(p.currentMF.GetType() == dto.MetricType_HISTOGRAM && p.currentLabelPair.GetName() == model.BucketLabel) {
+		p.currentMetric.Label = append(p.currentMetric.Label, p.currentLabelPair)
+	}
+	if p.skipBlankTabIfCurrentBlankTab(); p.err != nil {
+		return nil // Unexpected end of input.
+	}
+	if p.currentByte != '=' {
+		p.parseError(fmt.Sprintf("expected '=' after label name, found %q", p.currentByte))
+		return nil
+	}
+	return p.startLabelValue
+}
+
+// startLabelValue represents the state where the next byte read from p.buf is
+// the start of a (quoted) label value (or whitespace leading up to it).
+func (p *TextParser) startLabelValue() stateFn {
+	if p.skipBlankTab(); p.err != nil {
+		return nil // Unexpected end of input.
+	}
+	if p.currentByte != '"' {
+		p.parseError(fmt.Sprintf("expected '\"' at start of label value, found %q", p.currentByte))
+		return nil
+	}
+	if p.readTokenAsLabelValue(); p.err != nil {
+		return nil
+	}
+	if !model.LabelValue(p.currentToken.String()).IsValid() {
+		p.parseError(fmt.Sprintf("invalid label value %q", p.currentToken.String()))
+		return nil
+	}
+	p.currentLabelPair.Value = proto.String(p.currentToken.String())
+	// Special treatment of summaries:
+	// - Quantile labels are special, will result in dto.Quantile later.
+	// - Other labels have to be added to currentLabels for signature calculation.
+	if p.currentMF.GetType() == dto.MetricType_SUMMARY {
+		if p.currentLabelPair.GetName() == model.QuantileLabel {
+			if p.currentQuantile, p.err = strconv.ParseFloat(p.currentLabelPair.GetValue(), 64); p.err != nil {
+				// Create a more helpful error message.
+				p.parseError(fmt.Sprintf("expected float as value for 'quantile' label, got %q", p.currentLabelPair.GetValue()))
+				return nil
+			}
+		} else {
+			p.currentLabels[p.currentLabelPair.GetName()] = p.currentLabelPair.GetValue()
+		}
+	}
+	// Similar special treatment of histograms.
+	if p.currentMF.GetType() == dto.MetricType_HISTOGRAM {
+		if p.currentLabelPair.GetName() == model.BucketLabel {
+			if p.currentBucket, p.err = strconv.ParseFloat(p.currentLabelPair.GetValue(), 64); p.err != nil {
+				// Create a more helpful error message.
+				p.parseError(fmt.Sprintf("expected float as value for 'le' label, got %q", p.currentLabelPair.GetValue()))
+				return nil
+			}
+		} else {
+			p.currentLabe
