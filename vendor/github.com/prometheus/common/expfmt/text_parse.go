@@ -439,4 +439,108 @@ func (p *TextParser) readingValue() stateFn {
 				p.currentMetric.Histogram.Bucket,
 				&dto.Bucket{
 					UpperBound:      proto.Float64(p.currentBucket),
-					CumulativeCount: proto.Uint64(uint64(v
+					CumulativeCount: proto.Uint64(uint64(value)),
+				},
+			)
+		}
+	default:
+		p.err = fmt.Errorf("unexpected type for metric name %q", p.currentMF.GetName())
+	}
+	if p.currentByte == '\n' {
+		return p.startOfLine
+	}
+	return p.startTimestamp
+}
+
+// startTimestamp represents the state where the next byte read from p.buf is
+// the start of the timestamp (or whitespace leading up to it).
+func (p *TextParser) startTimestamp() stateFn {
+	if p.skipBlankTab(); p.err != nil {
+		return nil // Unexpected end of input.
+	}
+	if p.readTokenUntilWhitespace(); p.err != nil {
+		return nil // Unexpected end of input.
+	}
+	timestamp, err := strconv.ParseInt(p.currentToken.String(), 10, 64)
+	if err != nil {
+		// Create a more helpful error message.
+		p.parseError(fmt.Sprintf("expected integer as timestamp, got %q", p.currentToken.String()))
+		return nil
+	}
+	p.currentMetric.TimestampMs = proto.Int64(timestamp)
+	if p.readTokenUntilNewline(false); p.err != nil {
+		return nil // Unexpected end of input.
+	}
+	if p.currentToken.Len() > 0 {
+		p.parseError(fmt.Sprintf("spurious string after timestamp: %q", p.currentToken.String()))
+		return nil
+	}
+	return p.startOfLine
+}
+
+// readingHelp represents the state where the last byte read (now in
+// p.currentByte) is the first byte of the docstring after 'HELP'.
+func (p *TextParser) readingHelp() stateFn {
+	if p.currentMF.Help != nil {
+		p.parseError(fmt.Sprintf("second HELP line for metric name %q", p.currentMF.GetName()))
+		return nil
+	}
+	// Rest of line is the docstring.
+	if p.readTokenUntilNewline(true); p.err != nil {
+		return nil // Unexpected end of input.
+	}
+	p.currentMF.Help = proto.String(p.currentToken.String())
+	return p.startOfLine
+}
+
+// readingType represents the state where the last byte read (now in
+// p.currentByte) is the first byte of the type hint after 'HELP'.
+func (p *TextParser) readingType() stateFn {
+	if p.currentMF.Type != nil {
+		p.parseError(fmt.Sprintf("second TYPE line for metric name %q, or TYPE reported after samples", p.currentMF.GetName()))
+		return nil
+	}
+	// Rest of line is the type.
+	if p.readTokenUntilNewline(false); p.err != nil {
+		return nil // Unexpected end of input.
+	}
+	metricType, ok := dto.MetricType_value[strings.ToUpper(p.currentToken.String())]
+	if !ok {
+		p.parseError(fmt.Sprintf("unknown metric type %q", p.currentToken.String()))
+		return nil
+	}
+	p.currentMF.Type = dto.MetricType(metricType).Enum()
+	return p.startOfLine
+}
+
+// parseError sets p.err to a ParseError at the current line with the given
+// message.
+func (p *TextParser) parseError(msg string) {
+	p.err = ParseError{
+		Line: p.lineCount,
+		Msg:  msg,
+	}
+}
+
+// skipBlankTab reads (and discards) bytes from p.buf until it encounters a byte
+// that is neither ' ' nor '\t'. That byte is left in p.currentByte.
+func (p *TextParser) skipBlankTab() {
+	for {
+		if p.currentByte, p.err = p.buf.ReadByte(); p.err != nil || !isBlankOrTab(p.currentByte) {
+			return
+		}
+	}
+}
+
+// skipBlankTabIfCurrentBlankTab works exactly as skipBlankTab but doesn't do
+// anything if p.currentByte is neither ' ' nor '\t'.
+func (p *TextParser) skipBlankTabIfCurrentBlankTab() {
+	if isBlankOrTab(p.currentByte) {
+		p.skipBlankTab()
+	}
+}
+
+// readTokenUntilWhitespace copies bytes from p.buf into p.currentToken.  The
+// first byte considered is the byte already read (now in p.currentByte).  The
+// first whitespace byte encountered is still copied into p.currentByte, but not
+// i
