@@ -343,4 +343,100 @@ func (p *TextParser) startLabelValue() stateFn {
 				return nil
 			}
 		} else {
-			p.currentLabe
+			p.currentLabels[p.currentLabelPair.GetName()] = p.currentLabelPair.GetValue()
+		}
+	}
+	if p.skipBlankTab(); p.err != nil {
+		return nil // Unexpected end of input.
+	}
+	switch p.currentByte {
+	case ',':
+		return p.startLabelName
+
+	case '}':
+		if p.skipBlankTab(); p.err != nil {
+			return nil // Unexpected end of input.
+		}
+		return p.readingValue
+	default:
+		p.parseError(fmt.Sprintf("unexpected end of label value %q", p.currentLabelPair.Value))
+		return nil
+	}
+}
+
+// readingValue represents the state where the last byte read (now in
+// p.currentByte) is the first byte of the sample value (i.e. a float).
+func (p *TextParser) readingValue() stateFn {
+	// When we are here, we have read all the labels, so for the
+	// special case of a summary/histogram, we can finally find out
+	// if the metric already exists.
+	if p.currentMF.GetType() == dto.MetricType_SUMMARY {
+		signature := model.LabelsToSignature(p.currentLabels)
+		if summary := p.summaries[signature]; summary != nil {
+			p.currentMetric = summary
+		} else {
+			p.summaries[signature] = p.currentMetric
+			p.currentMF.Metric = append(p.currentMF.Metric, p.currentMetric)
+		}
+	} else if p.currentMF.GetType() == dto.MetricType_HISTOGRAM {
+		signature := model.LabelsToSignature(p.currentLabels)
+		if histogram := p.histograms[signature]; histogram != nil {
+			p.currentMetric = histogram
+		} else {
+			p.histograms[signature] = p.currentMetric
+			p.currentMF.Metric = append(p.currentMF.Metric, p.currentMetric)
+		}
+	} else {
+		p.currentMF.Metric = append(p.currentMF.Metric, p.currentMetric)
+	}
+	if p.readTokenUntilWhitespace(); p.err != nil {
+		return nil // Unexpected end of input.
+	}
+	value, err := strconv.ParseFloat(p.currentToken.String(), 64)
+	if err != nil {
+		// Create a more helpful error message.
+		p.parseError(fmt.Sprintf("expected float as value, got %q", p.currentToken.String()))
+		return nil
+	}
+	switch p.currentMF.GetType() {
+	case dto.MetricType_COUNTER:
+		p.currentMetric.Counter = &dto.Counter{Value: proto.Float64(value)}
+	case dto.MetricType_GAUGE:
+		p.currentMetric.Gauge = &dto.Gauge{Value: proto.Float64(value)}
+	case dto.MetricType_UNTYPED:
+		p.currentMetric.Untyped = &dto.Untyped{Value: proto.Float64(value)}
+	case dto.MetricType_SUMMARY:
+		// *sigh*
+		if p.currentMetric.Summary == nil {
+			p.currentMetric.Summary = &dto.Summary{}
+		}
+		switch {
+		case p.currentIsSummaryCount:
+			p.currentMetric.Summary.SampleCount = proto.Uint64(uint64(value))
+		case p.currentIsSummarySum:
+			p.currentMetric.Summary.SampleSum = proto.Float64(value)
+		case !math.IsNaN(p.currentQuantile):
+			p.currentMetric.Summary.Quantile = append(
+				p.currentMetric.Summary.Quantile,
+				&dto.Quantile{
+					Quantile: proto.Float64(p.currentQuantile),
+					Value:    proto.Float64(value),
+				},
+			)
+		}
+	case dto.MetricType_HISTOGRAM:
+		// *sigh*
+		if p.currentMetric.Histogram == nil {
+			p.currentMetric.Histogram = &dto.Histogram{}
+		}
+		switch {
+		case p.currentIsHistogramCount:
+			p.currentMetric.Histogram.SampleCount = proto.Uint64(uint64(value))
+		case p.currentIsHistogramSum:
+			p.currentMetric.Histogram.SampleSum = proto.Float64(value)
+		case !math.IsNaN(p.currentBucket):
+			p.currentMetric.Histogram.Bucket = append(
+				p.currentMetric.Histogram.Bucket,
+				&dto.Bucket{
+					UpperBound:      proto.Float64(p.currentBucket),
+					CumulativeCount: proto.Uint64(uint64(v
