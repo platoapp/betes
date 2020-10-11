@@ -652,4 +652,106 @@ func (p *TextParser) readTokenAsLabelValue() {
 		case '"':
 			return
 		case '\n':
-			p.parseError(fmt.Sprintf("label value %q contains unescaped new-line", p.currentToken.St
+			p.parseError(fmt.Sprintf("label value %q contains unescaped new-line", p.currentToken.String()))
+			return
+		case '\\':
+			escaped = true
+		default:
+			p.currentToken.WriteByte(p.currentByte)
+		}
+	}
+}
+
+func (p *TextParser) setOrCreateCurrentMF() {
+	p.currentIsSummaryCount = false
+	p.currentIsSummarySum = false
+	p.currentIsHistogramCount = false
+	p.currentIsHistogramSum = false
+	name := p.currentToken.String()
+	if p.currentMF = p.metricFamiliesByName[name]; p.currentMF != nil {
+		return
+	}
+	// Try out if this is a _sum or _count for a summary/histogram.
+	summaryName := summaryMetricName(name)
+	if p.currentMF = p.metricFamiliesByName[summaryName]; p.currentMF != nil {
+		if p.currentMF.GetType() == dto.MetricType_SUMMARY {
+			if isCount(name) {
+				p.currentIsSummaryCount = true
+			}
+			if isSum(name) {
+				p.currentIsSummarySum = true
+			}
+			return
+		}
+	}
+	histogramName := histogramMetricName(name)
+	if p.currentMF = p.metricFamiliesByName[histogramName]; p.currentMF != nil {
+		if p.currentMF.GetType() == dto.MetricType_HISTOGRAM {
+			if isCount(name) {
+				p.currentIsHistogramCount = true
+			}
+			if isSum(name) {
+				p.currentIsHistogramSum = true
+			}
+			return
+		}
+	}
+	p.currentMF = &dto.MetricFamily{Name: proto.String(name)}
+	p.metricFamiliesByName[name] = p.currentMF
+}
+
+func isValidLabelNameStart(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || b == '_'
+}
+
+func isValidLabelNameContinuation(b byte) bool {
+	return isValidLabelNameStart(b) || (b >= '0' && b <= '9')
+}
+
+func isValidMetricNameStart(b byte) bool {
+	return isValidLabelNameStart(b) || b == ':'
+}
+
+func isValidMetricNameContinuation(b byte) bool {
+	return isValidLabelNameContinuation(b) || b == ':'
+}
+
+func isBlankOrTab(b byte) bool {
+	return b == ' ' || b == '\t'
+}
+
+func isCount(name string) bool {
+	return len(name) > 6 && name[len(name)-6:] == "_count"
+}
+
+func isSum(name string) bool {
+	return len(name) > 4 && name[len(name)-4:] == "_sum"
+}
+
+func isBucket(name string) bool {
+	return len(name) > 7 && name[len(name)-7:] == "_bucket"
+}
+
+func summaryMetricName(name string) string {
+	switch {
+	case isCount(name):
+		return name[:len(name)-6]
+	case isSum(name):
+		return name[:len(name)-4]
+	default:
+		return name
+	}
+}
+
+func histogramMetricName(name string) string {
+	switch {
+	case isCount(name):
+		return name[:len(name)-6]
+	case isSum(name):
+		return name[:len(name)-4]
+	case isBucket(name):
+		return name[:len(name)-7]
+	default:
+		return name
+	}
+}
