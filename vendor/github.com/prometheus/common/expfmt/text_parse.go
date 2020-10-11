@@ -543,4 +543,113 @@ func (p *TextParser) skipBlankTabIfCurrentBlankTab() {
 // readTokenUntilWhitespace copies bytes from p.buf into p.currentToken.  The
 // first byte considered is the byte already read (now in p.currentByte).  The
 // first whitespace byte encountered is still copied into p.currentByte, but not
-// i
+// into p.currentToken.
+func (p *TextParser) readTokenUntilWhitespace() {
+	p.currentToken.Reset()
+	for p.err == nil && !isBlankOrTab(p.currentByte) && p.currentByte != '\n' {
+		p.currentToken.WriteByte(p.currentByte)
+		p.currentByte, p.err = p.buf.ReadByte()
+	}
+}
+
+// readTokenUntilNewline copies bytes from p.buf into p.currentToken.  The first
+// byte considered is the byte already read (now in p.currentByte).  The first
+// newline byte encountered is still copied into p.currentByte, but not into
+// p.currentToken. If recognizeEscapeSequence is true, two escape sequences are
+// recognized: '\\' tranlates into '\', and '\n' into a line-feed character. All
+// other escape sequences are invalid and cause an error.
+func (p *TextParser) readTokenUntilNewline(recognizeEscapeSequence bool) {
+	p.currentToken.Reset()
+	escaped := false
+	for p.err == nil {
+		if recognizeEscapeSequence && escaped {
+			switch p.currentByte {
+			case '\\':
+				p.currentToken.WriteByte(p.currentByte)
+			case 'n':
+				p.currentToken.WriteByte('\n')
+			default:
+				p.parseError(fmt.Sprintf("invalid escape sequence '\\%c'", p.currentByte))
+				return
+			}
+			escaped = false
+		} else {
+			switch p.currentByte {
+			case '\n':
+				return
+			case '\\':
+				escaped = true
+			default:
+				p.currentToken.WriteByte(p.currentByte)
+			}
+		}
+		p.currentByte, p.err = p.buf.ReadByte()
+	}
+}
+
+// readTokenAsMetricName copies a metric name from p.buf into p.currentToken.
+// The first byte considered is the byte already read (now in p.currentByte).
+// The first byte not part of a metric name is still copied into p.currentByte,
+// but not into p.currentToken.
+func (p *TextParser) readTokenAsMetricName() {
+	p.currentToken.Reset()
+	if !isValidMetricNameStart(p.currentByte) {
+		return
+	}
+	for {
+		p.currentToken.WriteByte(p.currentByte)
+		p.currentByte, p.err = p.buf.ReadByte()
+		if p.err != nil || !isValidMetricNameContinuation(p.currentByte) {
+			return
+		}
+	}
+}
+
+// readTokenAsLabelName copies a label name from p.buf into p.currentToken.
+// The first byte considered is the byte already read (now in p.currentByte).
+// The first byte not part of a label name is still copied into p.currentByte,
+// but not into p.currentToken.
+func (p *TextParser) readTokenAsLabelName() {
+	p.currentToken.Reset()
+	if !isValidLabelNameStart(p.currentByte) {
+		return
+	}
+	for {
+		p.currentToken.WriteByte(p.currentByte)
+		p.currentByte, p.err = p.buf.ReadByte()
+		if p.err != nil || !isValidLabelNameContinuation(p.currentByte) {
+			return
+		}
+	}
+}
+
+// readTokenAsLabelValue copies a label value from p.buf into p.currentToken.
+// In contrast to the other 'readTokenAs...' functions, which start with the
+// last read byte in p.currentByte, this method ignores p.currentByte and starts
+// with reading a new byte from p.buf. The first byte not part of a label value
+// is still copied into p.currentByte, but not into p.currentToken.
+func (p *TextParser) readTokenAsLabelValue() {
+	p.currentToken.Reset()
+	escaped := false
+	for {
+		if p.currentByte, p.err = p.buf.ReadByte(); p.err != nil {
+			return
+		}
+		if escaped {
+			switch p.currentByte {
+			case '"', '\\':
+				p.currentToken.WriteByte(p.currentByte)
+			case 'n':
+				p.currentToken.WriteByte('\n')
+			default:
+				p.parseError(fmt.Sprintf("invalid escape sequence '\\%c'", p.currentByte))
+				return
+			}
+			escaped = false
+			continue
+		}
+		switch p.currentByte {
+		case '"':
+			return
+		case '\n':
+			p.parseError(fmt.Sprintf("label value %q contains unescaped new-line", p.currentToken.St
