@@ -211,4 +211,53 @@ type V4Ops struct {
 	GetFH        uint64
 	Link         uint64
 	Lock         uint64
-	Lockt        
+	Lockt        uint64
+	Locku        uint64
+	Lookup       uint64
+	LookupRoot   uint64
+	Nverify      uint64
+	Open         uint64
+	OpenAttr     uint64
+	OpenConfirm  uint64
+	OpenDgrd     uint64
+	PutFH        uint64
+	PutPubFH     uint64
+	PutRootFH    uint64
+	Read         uint64
+	ReadDir      uint64
+	ReadLink     uint64
+	Remove       uint64
+	Rename       uint64
+	Renew        uint64
+	RestoreFH    uint64
+	SaveFH       uint64
+	SecInfo      uint64
+	SetAttr      uint64
+	Verify       uint64
+	Write        uint64
+	RelLockOwner uint64
+}
+
+// RPCStats models all stats from /proc/net/rpc/nfs.
+type ClientRPCStats struct {
+	Network       Network
+	ClientRPC     ClientRPC
+	V2Stats       V2Stats
+	V3Stats       V3Stats
+	ClientV4Stats ClientV4Stats
+}
+
+// ServerRPCStats models all stats from /proc/net/rpc/nfsd.
+type ServerRPCStats struct {
+	ReplyCache     ReplyCache
+	FileHandles    FileHandles
+	InputOutput    InputOutput
+	Threads        Threads
+	ReadAheadCache ReadAheadCache
+	Network        Network
+	ServerRPC      ServerRPC
+	V2Stats        V2Stats
+	V3Stats        V3Stats
+	ServerV4Stats  ServerV4Stats
+	V4Ops          V4Ops
+}
