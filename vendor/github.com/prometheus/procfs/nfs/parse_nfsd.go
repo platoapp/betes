@@ -64,4 +64,26 @@ func ParseServerRPCStats(r io.Reader) (*ServerRPCStats, error) {
 		case "net":
 			stats.Network, err = parseNetwork(values)
 		case "rpc":
-			stats.ServerRPC, err = parseServer
+			stats.ServerRPC, err = parseServerRPC(values)
+		case "proc2":
+			stats.V2Stats, err = parseV2Stats(values)
+		case "proc3":
+			stats.V3Stats, err = parseV3Stats(values)
+		case "proc4":
+			stats.ServerV4Stats, err = parseServerV4Stats(values)
+		case "proc4ops":
+			stats.V4Ops, err = parseV4Ops(values)
+		default:
+			return nil, fmt.Errorf("unknown NFSd metric line %q", metricLine)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("errors parsing NFSd metric line: %s", err)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error scanning NFSd file: %s", err)
+	}
+
+	return stats, nil
+}
