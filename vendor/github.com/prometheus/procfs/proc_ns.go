@@ -39,4 +39,17 @@ func (p Proc) NewNamespaces() (Namespaces, error) {
 
 		fields := strings.SplitN(target, ":", 2)
 		if len(fields) != 2 {
-			return nil, fmt.Errorf("failed to pars
+			return nil, fmt.Errorf("failed to parse namespace type and inode from '%v'", target)
+		}
+
+		typ := fields[0]
+		inode, err := strconv.ParseUint(strings.Trim(fields[1], "[]"), 10, 32)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse inode from '%v': %v", fields[1], err)
+		}
+
+		ns[name] = Namespace{typ, uint32(inode)}
+	}
+
+	return ns, nil
+}
