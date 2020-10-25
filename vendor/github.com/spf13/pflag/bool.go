@@ -88,4 +88,7 @@ func Bool(name string, value bool, usage string) *bool {
 }
 
 // BoolP is like Bool, but accepts a shorthand letter that can be used after a single dash.
-fu
+func BoolP(name, shorthand string, value bool, usage string) *bool {
+	b := CommandLine.BoolP(name, shorthand, value, usage)
+	return b
+}
