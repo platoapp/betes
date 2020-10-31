@@ -90,4 +90,92 @@ TRUE, FALSE, True, False.
 Duration flags accept any input valid for time.ParseDuration.
 
 The default set of command-line flags is controlled by
-top-level 
+top-level functions.  The FlagSet type allows one to define
+independent sets of flags, such as to implement subcommands
+in a command-line interface. The methods of FlagSet are
+analogous to the top-level functions for the command-line
+flag set.
+*/
+package pflag
+
+import (
+	"bytes"
+	"errors"
+	goflag "flag"
+	"fmt"
+	"io"
+	"os"
+	"sort"
+	"strings"
+)
+
+// ErrHelp is the error returned if the flag -help is invoked but no such flag is defined.
+var ErrHelp = errors.New("pflag: help requested")
+
+// ErrorHandling defines how to handle flag parsing errors.
+type ErrorHandling int
+
+const (
+	// ContinueOnError will return an err from Parse() if an error is found
+	ContinueOnError ErrorHandling = iota
+	// ExitOnError will call os.Exit(2) if an error is found when parsing
+	ExitOnError
+	// PanicOnError will panic() if an error is found when parsing flags
+	PanicOnError
+)
+
+// ParseErrorsWhitelist defines the parsing errors that can be ignored
+type ParseErrorsWhitelist struct {
+	// UnknownFlags will ignore unknown flags errors and continue parsing rest of the flags
+	UnknownFlags bool
+}
+
+// NormalizedName is a flag name that has been normalized according to rules
+// for the FlagSet (e.g. making '-' and '_' equivalent).
+type NormalizedName string
+
+// A FlagSet represents a set of defined flags.
+type FlagSet struct {
+	// Usage is the function called when an error occurs while parsing flags.
+	// The field is a function (not a method) that may be changed to point to
+	// a custom error handler.
+	Usage func()
+
+	// SortFlags is used to indicate, if user wants to have sorted flags in
+	// help/usage messages.
+	SortFlags bool
+
+	// ParseErrorsWhitelist is used to configure a whitelist of errors
+	ParseErrorsWhitelist ParseErrorsWhitelist
+
+	name              string
+	parsed            bool
+	actual            map[NormalizedName]*Flag
+	orderedActual     []*Flag
+	sortedActual      []*Flag
+	formal            map[NormalizedName]*Flag
+	orderedFormal     []*Flag
+	sortedFormal      []*Flag
+	shorthands        map[byte]*Flag
+	args              []string // arguments after flags
+	argsLenAtDash     int      // len(args) when a '--' was located when parsing, or -1 if no --
+	errorHandling     ErrorHandling
+	output            io.Writer // nil means stderr; use out() accessor
+	interspersed      bool      // allow interspersed option/non-option args
+	normalizeNameFunc func(f *FlagSet, name string) NormalizedName
+
+	addedGoFlagSets []*goflag.FlagSet
+}
+
+// A Flag represents the state of a flag.
+type Flag struct {
+	Name                string              // name as it appears on command line
+	Shorthand           string              // one-letter abbreviated flag
+	Usage               string              // help message
+	Value               Value               // value as set
+	DefValue            string              // default value (as text); for usage message
+	Changed             bool                // If the user set the value (or if left to default)
+	NoOptDefVal         string              // default value (as text); if the flag is on the command line without any options
+	Deprecated          string              // If this flag is deprecated, this string is the new or now thing to use
+	Hidden              bool                // used by cobra.Command to allow flags to be hidden from help/usage text
+	ShorthandDeprecated string              // If the shorthand of this flag is deprecated, this string is the new or now th
