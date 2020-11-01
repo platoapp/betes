@@ -417,4 +417,119 @@ func (f *FlagSet) MarkShorthandDeprecated(name string, usageMessage string) erro
 	return nil
 }
 
-// MarkHidden 
+// MarkHidden sets a flag to 'hidden' in your program. It will continue to
+// function but will not show up in help or usage messages.
+func (f *FlagSet) MarkHidden(name string) error {
+	flag := f.Lookup(name)
+	if flag == nil {
+		return fmt.Errorf("flag %q does not exist", name)
+	}
+	flag.Hidden = true
+	return nil
+}
+
+// Lookup returns the Flag structure of the named command-line flag,
+// returning nil if none exists.
+func Lookup(name string) *Flag {
+	return CommandLine.Lookup(name)
+}
+
+// ShorthandLookup returns the Flag structure of the short handed flag,
+// returning nil if none exists.
+func ShorthandLookup(name string) *Flag {
+	return CommandLine.ShorthandLookup(name)
+}
+
+// Set sets the value of the named flag.
+func (f *FlagSet) Set(name, value string) error {
+	normalName := f.normalizeFlagName(name)
+	flag, ok := f.formal[normalName]
+	if !ok {
+		return fmt.Errorf("no such flag -%v", name)
+	}
+
+	err := flag.Value.Set(value)
+	if err != nil {
+		var flagName string
+		if flag.Shorthand != "" && flag.ShorthandDeprecated == "" {
+			flagName = fmt.Sprintf("-%s, --%s", flag.Shorthand, flag.Name)
+		} else {
+			flagName = fmt.Sprintf("--%s", flag.Name)
+		}
+		return fmt.Errorf("invalid argument %q for %q flag: %v", value, flagName, err)
+	}
+
+	if !flag.Changed {
+		if f.actual == nil {
+			f.actual = make(map[NormalizedName]*Flag)
+		}
+		f.actual[normalName] = flag
+		f.orderedActual = append(f.orderedActual, flag)
+
+		flag.Changed = true
+	}
+
+	if flag.Deprecated != "" {
+		fmt.Fprintf(f.out(), "Flag --%s has been deprecated, %s\n", flag.Name, flag.Deprecated)
+	}
+	return nil
+}
+
+// SetAnnotation allows one to set arbitrary annotations on a flag in the FlagSet.
+// This is sometimes used by spf13/cobra programs which want to generate additional
+// bash completion information.
+func (f *FlagSet) SetAnnotation(name, key string, values []string) error {
+	normalName := f.normalizeFlagName(name)
+	flag, ok := f.formal[normalName]
+	if !ok {
+		return fmt.Errorf("no such flag -%v", name)
+	}
+	if flag.Annotations == nil {
+		flag.Annotations = map[string][]string{}
+	}
+	flag.Annotations[key] = values
+	return nil
+}
+
+// Changed returns true if the flag was explicitly set during Parse() and false
+// otherwise
+func (f *FlagSet) Changed(name string) bool {
+	flag := f.Lookup(name)
+	// If a flag doesn't exist, it wasn't changed....
+	if flag == nil {
+		return false
+	}
+	return flag.Changed
+}
+
+// Set sets the value of the named command-line flag.
+func Set(name, value string) error {
+	return CommandLine.Set(name, value)
+}
+
+// PrintDefaults prints, to standard error unless configured
+// otherwise, the default values of all defined flags in the set.
+func (f *FlagSet) PrintDefaults() {
+	usages := f.FlagUsages()
+	fmt.Fprint(f.out(), usages)
+}
+
+// defaultIsZeroValue returns true if the default value for this flag represents
+// a zero value.
+func (f *Flag) defaultIsZeroValue() bool {
+	switch f.Value.(type) {
+	case boolFlag:
+		return f.DefValue == "false"
+	case *durationValue:
+		// Beginning in Go 1.7, duration zero values are "0s"
+		return f.DefValue == "0" || f.DefValue == "0s"
+	case *intValue, *int8Value, *int32Value, *int64Value, *uintValue, *uint8Value, *uint16Value, *uint32Value, *uint64Value, *countValue, *float32Value, *float64Value:
+		return f.DefValue == "0"
+	case *stringValue:
+		return f.DefValue == ""
+	case *ipValue, *ipMaskValue, *ipNetValue:
+		return f.DefValue == "<nil>"
+	case *intSliceValue, *stringSliceValue, *stringArrayValue:
+		return f.DefValue == "[]"
+	default:
+		switch f
