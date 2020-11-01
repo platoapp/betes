@@ -303,4 +303,118 @@ func VisitAll(fn func(*Flag)) {
 }
 
 // Visit visits the flags in lexicographical order or
-// in primordial order if f.SortFlags is false
+// in primordial order if f.SortFlags is false, calling fn for each.
+// It visits only those flags that have been set.
+func (f *FlagSet) Visit(fn func(*Flag)) {
+	if len(f.actual) == 0 {
+		return
+	}
+
+	var flags []*Flag
+	if f.SortFlags {
+		if len(f.actual) != len(f.sortedActual) {
+			f.sortedActual = sortFlags(f.actual)
+		}
+		flags = f.sortedActual
+	} else {
+		flags = f.orderedActual
+	}
+
+	for _, flag := range flags {
+		fn(flag)
+	}
+}
+
+// Visit visits the command-line flags in lexicographical order or
+// in primordial order if f.SortFlags is false, calling fn for each.
+// It visits only those flags that have been set.
+func Visit(fn func(*Flag)) {
+	CommandLine.Visit(fn)
+}
+
+// Lookup returns the Flag structure of the named flag, returning nil if none exists.
+func (f *FlagSet) Lookup(name string) *Flag {
+	return f.lookup(f.normalizeFlagName(name))
+}
+
+// ShorthandLookup returns the Flag structure of the short handed flag,
+// returning nil if none exists.
+// It panics, if len(name) > 1.
+func (f *FlagSet) ShorthandLookup(name string) *Flag {
+	if name == "" {
+		return nil
+	}
+	if len(name) > 1 {
+		msg := fmt.Sprintf("can not look up shorthand which is more than one ASCII character: %q", name)
+		fmt.Fprintf(f.out(), msg)
+		panic(msg)
+	}
+	c := name[0]
+	return f.shorthands[c]
+}
+
+// lookup returns the Flag structure of the named flag, returning nil if none exists.
+func (f *FlagSet) lookup(name NormalizedName) *Flag {
+	return f.formal[name]
+}
+
+// func to return a given type for a given flag name
+func (f *FlagSet) getFlagType(name string, ftype string, convFunc func(sval string) (interface{}, error)) (interface{}, error) {
+	flag := f.Lookup(name)
+	if flag == nil {
+		err := fmt.Errorf("flag accessed but not defined: %s", name)
+		return nil, err
+	}
+
+	if flag.Value.Type() != ftype {
+		err := fmt.Errorf("trying to get %s value of flag of type %s", ftype, flag.Value.Type())
+		return nil, err
+	}
+
+	sval := flag.Value.String()
+	result, err := convFunc(sval)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// ArgsLenAtDash will return the length of f.Args at the moment when a -- was
+// found during arg parsing. This allows your program to know which args were
+// before the -- and which came after.
+func (f *FlagSet) ArgsLenAtDash() int {
+	return f.argsLenAtDash
+}
+
+// MarkDeprecated indicated that a flag is deprecated in your program. It will
+// continue to function but will not show up in help or usage messages. Using
+// this flag will also print the given usageMessage.
+func (f *FlagSet) MarkDeprecated(name string, usageMessage string) error {
+	flag := f.Lookup(name)
+	if flag == nil {
+		return fmt.Errorf("flag %q does not exist", name)
+	}
+	if usageMessage == "" {
+		return fmt.Errorf("deprecated message for flag %q must be set", name)
+	}
+	flag.Deprecated = usageMessage
+	flag.Hidden = true
+	return nil
+}
+
+// MarkShorthandDeprecated will mark the shorthand of a flag deprecated in your
+// program. It will continue to function but will not show up in help or usage
+// messages. Using this flag will also print the given usageMessage.
+func (f *FlagSet) MarkShorthandDeprecated(name string, usageMessage string) error {
+	flag := f.Lookup(name)
+	if flag == nil {
+		return fmt.Errorf("flag %q does not exist", name)
+	}
+	if usageMessage == "" {
+		return fmt.Errorf("deprecated message for flag %q must be set", name)
+	}
+	flag.ShorthandDeprecated = usageMessage
+	return nil
+}
+
+// MarkHidden 
