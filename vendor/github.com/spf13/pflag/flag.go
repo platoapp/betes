@@ -178,4 +178,129 @@ type Flag struct {
 	NoOptDefVal         string              // default value (as text); if the flag is on the command line without any options
 	Deprecated          string              // If this flag is deprecated, this string is the new or now thing to use
 	Hidden              bool                // used by cobra.Command to allow flags to be hidden from help/usage text
-	ShorthandDeprecated string              // If the shorthand of this flag is deprecated, this string is the new or now th
+	ShorthandDeprecated string              // If the shorthand of this flag is deprecated, this string is the new or now thing to use
+	Annotations         map[string][]string // used by cobra.Command bash autocomple code
+}
+
+// Value is the interface to the dynamic value stored in a flag.
+// (The default value is represented as a string.)
+type Value interface {
+	String() string
+	Set(string) error
+	Type() string
+}
+
+// sortFlags returns the flags as a slice in lexicographical sorted order.
+func sortFlags(flags map[NormalizedName]*Flag) []*Flag {
+	list := make(sort.StringSlice, len(flags))
+	i := 0
+	for k := range flags {
+		list[i] = string(k)
+		i++
+	}
+	list.Sort()
+	result := make([]*Flag, len(list))
+	for i, name := range list {
+		result[i] = flags[NormalizedName(name)]
+	}
+	return result
+}
+
+// SetNormalizeFunc allows you to add a function which can translate flag names.
+// Flags added to the FlagSet will be translated and then when anything tries to
+// look up the flag that will also be translated. So it would be possible to create
+// a flag named "getURL" and have it translated to "geturl".  A user could then pass
+// "--getUrl" which may also be translated to "geturl" and everything will work.
+func (f *FlagSet) SetNormalizeFunc(n func(f *FlagSet, name string) NormalizedName) {
+	f.normalizeNameFunc = n
+	f.sortedFormal = f.sortedFormal[:0]
+	for fname, flag := range f.formal {
+		nname := f.normalizeFlagName(flag.Name)
+		if fname == nname {
+			continue
+		}
+		flag.Name = string(nname)
+		delete(f.formal, fname)
+		f.formal[nname] = flag
+		if _, set := f.actual[fname]; set {
+			delete(f.actual, fname)
+			f.actual[nname] = flag
+		}
+	}
+}
+
+// GetNormalizeFunc returns the previously set NormalizeFunc of a function which
+// does no translation, if not set previously.
+func (f *FlagSet) GetNormalizeFunc() func(f *FlagSet, name string) NormalizedName {
+	if f.normalizeNameFunc != nil {
+		return f.normalizeNameFunc
+	}
+	return func(f *FlagSet, name string) NormalizedName { return NormalizedName(name) }
+}
+
+func (f *FlagSet) normalizeFlagName(name string) NormalizedName {
+	n := f.GetNormalizeFunc()
+	return n(f, name)
+}
+
+func (f *FlagSet) out() io.Writer {
+	if f.output == nil {
+		return os.Stderr
+	}
+	return f.output
+}
+
+// SetOutput sets the destination for usage and error messages.
+// If output is nil, os.Stderr is used.
+func (f *FlagSet) SetOutput(output io.Writer) {
+	f.output = output
+}
+
+// VisitAll visits the flags in lexicographical order or
+// in primordial order if f.SortFlags is false, calling fn for each.
+// It visits all flags, even those not set.
+func (f *FlagSet) VisitAll(fn func(*Flag)) {
+	if len(f.formal) == 0 {
+		return
+	}
+
+	var flags []*Flag
+	if f.SortFlags {
+		if len(f.formal) != len(f.sortedFormal) {
+			f.sortedFormal = sortFlags(f.formal)
+		}
+		flags = f.sortedFormal
+	} else {
+		flags = f.orderedFormal
+	}
+
+	for _, flag := range flags {
+		fn(flag)
+	}
+}
+
+// HasFlags returns a bool to indicate if the FlagSet has any flags defined.
+func (f *FlagSet) HasFlags() bool {
+	return len(f.formal) > 0
+}
+
+// HasAvailableFlags returns a bool to indicate if the FlagSet has any flags
+// that are not hidden.
+func (f *FlagSet) HasAvailableFlags() bool {
+	for _, flag := range f.formal {
+		if !flag.Hidden {
+			return true
+		}
+	}
+	return false
+}
+
+// VisitAll visits the command-line flags in lexicographical order or
+// in primordial order if f.SortFlags is false, calling fn for each.
+// It visits all flags, even those not set.
+func VisitAll(fn func(*Flag)) {
+	CommandLine.VisitAll(fn)
+}
+
+// Visit visits the flags in lexicographical order or
+// in primordial order if f.SortFlags is false
