@@ -675,4 +675,120 @@ func (f *FlagSet) FlagUsagesWrapped(cols int) string {
 
 		line := ""
 		if flag.Shorthand != "" && flag.ShorthandDeprecated == "" {
-			line = f
+			line = fmt.Sprintf("  -%s, --%s", flag.Shorthand, flag.Name)
+		} else {
+			line = fmt.Sprintf("      --%s", flag.Name)
+		}
+
+		varname, usage := UnquoteUsage(flag)
+		if varname != "" {
+			line += " " + varname
+		}
+		if flag.NoOptDefVal != "" {
+			switch flag.Value.Type() {
+			case "string":
+				line += fmt.Sprintf("[=\"%s\"]", flag.NoOptDefVal)
+			case "bool":
+				if flag.NoOptDefVal != "true" {
+					line += fmt.Sprintf("[=%s]", flag.NoOptDefVal)
+				}
+			case "count":
+				if flag.NoOptDefVal != "+1" {
+					line += fmt.Sprintf("[=%s]", flag.NoOptDefVal)
+				}
+			default:
+				line += fmt.Sprintf("[=%s]", flag.NoOptDefVal)
+			}
+		}
+
+		// This special character will be replaced with spacing once the
+		// correct alignment is calculated
+		line += "\x00"
+		if len(line) > maxlen {
+			maxlen = len(line)
+		}
+
+		line += usage
+		if !flag.defaultIsZeroValue() {
+			if flag.Value.Type() == "string" {
+				line += fmt.Sprintf(" (default %q)", flag.DefValue)
+			} else {
+				line += fmt.Sprintf(" (default %s)", flag.DefValue)
+			}
+		}
+		if len(flag.Deprecated) != 0 {
+			line += fmt.Sprintf(" (DEPRECATED: %s)", flag.Deprecated)
+		}
+
+		lines = append(lines, line)
+	})
+
+	for _, line := range lines {
+		sidx := strings.Index(line, "\x00")
+		spacing := strings.Repeat(" ", maxlen-sidx)
+		// maxlen + 2 comes from + 1 for the \x00 and + 1 for the (deliberate) off-by-one in maxlen-sidx
+		fmt.Fprintln(buf, line[:sidx], spacing, wrap(maxlen+2, cols, line[sidx+1:]))
+	}
+
+	return buf.String()
+}
+
+// FlagUsages returns a string containing the usage information for all flags in
+// the FlagSet
+func (f *FlagSet) FlagUsages() string {
+	return f.FlagUsagesWrapped(0)
+}
+
+// PrintDefaults prints to standard error the default values of all defined command-line flags.
+func PrintDefaults() {
+	CommandLine.PrintDefaults()
+}
+
+// defaultUsage is the default function to print a usage message.
+func defaultUsage(f *FlagSet) {
+	fmt.Fprintf(f.out(), "Usage of %s:\n", f.name)
+	f.PrintDefaults()
+}
+
+// NOTE: Usage is not just defaultUsage(CommandLine)
+// because it serves (via godoc flag Usage) as the example
+// for how to write your own usage function.
+
+// Usage prints to standard error a usage message documenting all defined command-line flags.
+// The function is a variable that may be changed to point to a custom function.
+// By default it prints a simple header and calls PrintDefaults; for details about the
+// format of the output and how to control it, see the documentation for PrintDefaults.
+var Usage = func() {
+	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
+	PrintDefaults()
+}
+
+// NFlag returns the number of flags that have been set.
+func (f *FlagSet) NFlag() int { return len(f.actual) }
+
+// NFlag returns the number of command-line flags that have been set.
+func NFlag() int { return len(CommandLine.actual) }
+
+// Arg returns the i'th argument.  Arg(0) is the first remaining argument
+// after flags have been processed.
+func (f *FlagSet) Arg(i int) string {
+	if i < 0 || i >= len(f.args) {
+		return ""
+	}
+	return f.args[i]
+}
+
+// Arg returns the i'th command-line argument.  Arg(0) is the first remaining argument
+// after flags have been processed.
+func Arg(i int) string {
+	return CommandLine.Arg(i)
+}
+
+// NArg is the number of arguments remaining after flags have been processed.
+func (f *FlagSet) NArg() int { return len(f.args) }
+
+// NArg is the number of arguments remaining after flags have been processed.
+func NArg() int { return len(CommandLine.args) }
+
+// Args returns the non-flag arguments.
+func (f *FlagSe
