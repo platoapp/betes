@@ -894,4 +894,164 @@ func VarP(value Value, name, shorthand, usage string) {
 
 // failf prints to standard error a formatted error and usage message and
 // returns the error.
-fun
+func (f *FlagSet) failf(format string, a ...interface{}) error {
+	err := fmt.Errorf(format, a...)
+	if f.errorHandling != ContinueOnError {
+		fmt.Fprintln(f.out(), err)
+		f.usage()
+	}
+	return err
+}
+
+// usage calls the Usage method for the flag set, or the usage function if
+// the flag set is CommandLine.
+func (f *FlagSet) usage() {
+	if f == CommandLine {
+		Usage()
+	} else if f.Usage == nil {
+		defaultUsage(f)
+	} else {
+		f.Usage()
+	}
+}
+
+//--unknown (args will be empty)
+//--unknown --next-flag ... (args will be --next-flag ...)
+//--unknown arg ... (args will be arg ...)
+func stripUnknownFlagValue(args []string) []string {
+	if len(args) == 0 {
+		//--unknown
+		return args
+	}
+
+	first := args[0]
+	if first[0] == '-' {
+		//--unknown --next-flag ...
+		return args
+	}
+
+	//--unknown arg ... (args will be arg ...)
+	return args[1:]
+}
+
+func (f *FlagSet) parseLongArg(s string, args []string, fn parseFunc) (a []string, err error) {
+	a = args
+	name := s[2:]
+	if len(name) == 0 || name[0] == '-' || name[0] == '=' {
+		err = f.failf("bad flag syntax: %s", s)
+		return
+	}
+
+	split := strings.SplitN(name, "=", 2)
+	name = split[0]
+	flag, exists := f.formal[f.normalizeFlagName(name)]
+
+	if !exists {
+		switch {
+		case name == "help":
+			f.usage()
+			return a, ErrHelp
+		case f.ParseErrorsWhitelist.UnknownFlags:
+			// --unknown=unknownval arg ...
+			// we do not want to lose arg in this case
+			if len(split) >= 2 {
+				return a, nil
+			}
+
+			return stripUnknownFlagValue(a), nil
+		default:
+			err = f.failf("unknown flag: --%s", name)
+			return
+		}
+	}
+
+	var value string
+	if len(split) == 2 {
+		// '--flag=arg'
+		value = split[1]
+	} else if flag.NoOptDefVal != "" {
+		// '--flag' (arg was optional)
+		value = flag.NoOptDefVal
+	} else if len(a) > 0 {
+		// '--flag arg'
+		value = a[0]
+		a = a[1:]
+	} else {
+		// '--flag' (arg was required)
+		err = f.failf("flag needs an argument: %s", s)
+		return
+	}
+
+	err = fn(flag, value)
+	if err != nil {
+		f.failf(err.Error())
+	}
+	return
+}
+
+func (f *FlagSet) parseSingleShortArg(shorthands string, args []string, fn parseFunc) (outShorts string, outArgs []string, err error) {
+	if strings.HasPrefix(shorthands, "test.") {
+		return
+	}
+
+	outArgs = args
+	outShorts = shorthands[1:]
+	c := shorthands[0]
+
+	flag, exists := f.shorthands[c]
+	if !exists {
+		switch {
+		case c == 'h':
+			f.usage()
+			err = ErrHelp
+			return
+		case f.ParseErrorsWhitelist.UnknownFlags:
+			// '-f=arg arg ...'
+			// we do not want to lose arg in this case
+			if len(shorthands) > 2 && shorthands[1] == '=' {
+				outShorts = ""
+				return
+			}
+
+			outArgs = stripUnknownFlagValue(outArgs)
+			return
+		default:
+			err = f.failf("unknown shorthand flag: %q in -%s", c, shorthands)
+			return
+		}
+	}
+
+	var value string
+	if len(shorthands) > 2 && shorthands[1] == '=' {
+		// '-f=arg'
+		value = shorthands[2:]
+		outShorts = ""
+	} else if flag.NoOptDefVal != "" {
+		// '-f' (arg was optional)
+		value = flag.NoOptDefVal
+	} else if len(shorthands) > 1 {
+		// '-farg'
+		value = shorthands[1:]
+		outShorts = ""
+	} else if len(args) > 0 {
+		// '-f arg'
+		value = args[0]
+		outArgs = args[1:]
+	} else {
+		// '-f' (arg was required)
+		err = f.failf("flag needs an argument: %q in -%s", c, shorthands)
+		return
+	}
+
+	if flag.ShorthandDeprecated != "" {
+		fmt.Fprintf(f.out(), "Flag shorthand -%s has been deprecated, %s\n", flag.Shorthand, flag.ShorthandDeprecated)
+	}
+
+	err = fn(flag, value)
+	if err != nil {
+		f.failf(err.Error())
+	}
+	return
+}
+
+func (f *FlagSet) parseShortArg(s string,
