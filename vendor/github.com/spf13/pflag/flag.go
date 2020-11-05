@@ -1054,4 +1054,134 @@ func (f *FlagSet) parseSingleShortArg(shorthands string, args []string, fn parse
 	return
 }
 
-func (f *FlagSet) parseShortArg(s string,
+func (f *FlagSet) parseShortArg(s string, args []string, fn parseFunc) (a []string, err error) {
+	a = args
+	shorthands := s[1:]
+
+	// "shorthands" can be a series of shorthand letters of flags (e.g. "-vvv").
+	for len(shorthands) > 0 {
+		shorthands, a, err = f.parseSingleShortArg(shorthands, args, fn)
+		if err != nil {
+			return
+		}
+	}
+
+	return
+}
+
+func (f *FlagSet) parseArgs(args []string, fn parseFunc) (err error) {
+	for len(args) > 0 {
+		s := args[0]
+		args = args[1:]
+		if len(s) == 0 || s[0] != '-' || len(s) == 1 {
+			if !f.interspersed {
+				f.args = append(f.args, s)
+				f.args = append(f.args, args...)
+				return nil
+			}
+			f.args = append(f.args, s)
+			continue
+		}
+
+		if s[1] == '-' {
+			if len(s) == 2 { // "--" terminates the flags
+				f.argsLenAtDash = len(f.args)
+				f.args = append(f.args, args...)
+				break
+			}
+			args, err = f.parseLongArg(s, args, fn)
+		} else {
+			args, err = f.parseShortArg(s, args, fn)
+		}
+		if err != nil {
+			return
+		}
+	}
+	return
+}
+
+// Parse parses flag definitions from the argument list, which should not
+// include the command name.  Must be called after all flags in the FlagSet
+// are defined and before flags are accessed by the program.
+// The return value will be ErrHelp if -help was set but not defined.
+func (f *FlagSet) Parse(arguments []string) error {
+	if f.addedGoFlagSets != nil {
+		for _, goFlagSet := range f.addedGoFlagSets {
+			goFlagSet.Parse(nil)
+		}
+	}
+	f.parsed = true
+
+	if len(arguments) < 0 {
+		return nil
+	}
+
+	f.args = make([]string, 0, len(arguments))
+
+	set := func(flag *Flag, value string) error {
+		return f.Set(flag.Name, value)
+	}
+
+	err := f.parseArgs(arguments, set)
+	if err != nil {
+		switch f.errorHandling {
+		case ContinueOnError:
+			return err
+		case ExitOnError:
+			fmt.Println(err)
+			os.Exit(2)
+		case PanicOnError:
+			panic(err)
+		}
+	}
+	return nil
+}
+
+type parseFunc func(flag *Flag, value string) error
+
+// ParseAll parses flag definitions from the argument list, which should not
+// include the command name. The arguments for fn are flag and value. Must be
+// called after all flags in the FlagSet are defined and before flags are
+// accessed by the program. The return value will be ErrHelp if -help was set
+// but not defined.
+func (f *FlagSet) ParseAll(arguments []string, fn func(flag *Flag, value string) error) error {
+	f.parsed = true
+	f.args = make([]string, 0, len(arguments))
+
+	err := f.parseArgs(arguments, fn)
+	if err != nil {
+		switch f.errorHandling {
+		case ContinueOnError:
+			return err
+		case ExitOnError:
+			os.Exit(2)
+		case PanicOnError:
+			panic(err)
+		}
+	}
+	return nil
+}
+
+// Parsed reports whether f.Parse has been called.
+func (f *FlagSet) Parsed() bool {
+	return f.parsed
+}
+
+// Parse parses the command-line flags from os.Args[1:].  Must be called
+// after all flags are defined and before flags are accessed by the program.
+func Parse() {
+	// Ignore errors; CommandLine is set for ExitOnError.
+	CommandLine.Parse(os.Args[1:])
+}
+
+// ParseAll parses the command-line flags from os.Args[1:] and called fn for each.
+// The arguments for fn are flag and value. Must be called after all flags are
+// defined and before flags are accessed by the program.
+func ParseAll(fn func(flag *Flag, value string) error) {
+	// Ignore errors; CommandLine is set for ExitOnError.
+	CommandLine.ParseAll(os.Args[1:], fn)
+}
+
+// SetInterspersed sets whether to support interspersed option/non-option arguments.
+func SetInterspersed(interspersed bool) {
+	CommandLine.SetInterspersed(i
