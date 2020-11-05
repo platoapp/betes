@@ -791,4 +791,107 @@ func (f *FlagSet) NArg() int { return len(f.args) }
 func NArg() int { return len(CommandLine.args) }
 
 // Args returns the non-flag arguments.
-func (f *FlagSe
+func (f *FlagSet) Args() []string { return f.args }
+
+// Args returns the non-flag command-line arguments.
+func Args() []string { return CommandLine.args }
+
+// Var defines a flag with the specified name and usage string. The type and
+// value of the flag are represented by the first argument, of type Value, which
+// typically holds a user-defined implementation of Value. For instance, the
+// caller could create a flag that turns a comma-separated string into a slice
+// of strings by giving the slice the methods of Value; in particular, Set would
+// decompose the comma-separated string into the slice.
+func (f *FlagSet) Var(value Value, name string, usage string) {
+	f.VarP(value, name, "", usage)
+}
+
+// VarPF is like VarP, but returns the flag created
+func (f *FlagSet) VarPF(value Value, name, shorthand, usage string) *Flag {
+	// Remember the default value as a string; it won't change.
+	flag := &Flag{
+		Name:      name,
+		Shorthand: shorthand,
+		Usage:     usage,
+		Value:     value,
+		DefValue:  value.String(),
+	}
+	f.AddFlag(flag)
+	return flag
+}
+
+// VarP is like Var, but accepts a shorthand letter that can be used after a single dash.
+func (f *FlagSet) VarP(value Value, name, shorthand, usage string) {
+	f.VarPF(value, name, shorthand, usage)
+}
+
+// AddFlag will add the flag to the FlagSet
+func (f *FlagSet) AddFlag(flag *Flag) {
+	normalizedFlagName := f.normalizeFlagName(flag.Name)
+
+	_, alreadyThere := f.formal[normalizedFlagName]
+	if alreadyThere {
+		msg := fmt.Sprintf("%s flag redefined: %s", f.name, flag.Name)
+		fmt.Fprintln(f.out(), msg)
+		panic(msg) // Happens only if flags are declared with identical names
+	}
+	if f.formal == nil {
+		f.formal = make(map[NormalizedName]*Flag)
+	}
+
+	flag.Name = string(normalizedFlagName)
+	f.formal[normalizedFlagName] = flag
+	f.orderedFormal = append(f.orderedFormal, flag)
+
+	if flag.Shorthand == "" {
+		return
+	}
+	if len(flag.Shorthand) > 1 {
+		msg := fmt.Sprintf("%q shorthand is more than one ASCII character", flag.Shorthand)
+		fmt.Fprintf(f.out(), msg)
+		panic(msg)
+	}
+	if f.shorthands == nil {
+		f.shorthands = make(map[byte]*Flag)
+	}
+	c := flag.Shorthand[0]
+	used, alreadyThere := f.shorthands[c]
+	if alreadyThere {
+		msg := fmt.Sprintf("unable to redefine %q shorthand in %q flagset: it's already used for %q flag", c, f.name, used.Name)
+		fmt.Fprintf(f.out(), msg)
+		panic(msg)
+	}
+	f.shorthands[c] = flag
+}
+
+// AddFlagSet adds one FlagSet to another. If a flag is already present in f
+// the flag from newSet will be ignored.
+func (f *FlagSet) AddFlagSet(newSet *FlagSet) {
+	if newSet == nil {
+		return
+	}
+	newSet.VisitAll(func(flag *Flag) {
+		if f.Lookup(flag.Name) == nil {
+			f.AddFlag(flag)
+		}
+	})
+}
+
+// Var defines a flag with the specified name and usage string. The type and
+// value of the flag are represented by the first argument, of type Value, which
+// typically holds a user-defined implementation of Value. For instance, the
+// caller could create a flag that turns a comma-separated string into a slice
+// of strings by giving the slice the methods of Value; in particular, Set would
+// decompose the comma-separated string into the slice.
+func Var(value Value, name string, usage string) {
+	CommandLine.VarP(value, name, "", usage)
+}
+
+// VarP is like Var, but accepts a shorthand letter that can be used after a single dash.
+func VarP(value Value, name, shorthand, usage string) {
+	CommandLine.VarP(value, name, shorthand, usage)
+}
+
+// failf prints to standard error a formatted error and usage message and
+// returns the error.
+fun
