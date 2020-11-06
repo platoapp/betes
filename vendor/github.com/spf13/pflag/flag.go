@@ -1184,4 +1184,40 @@ func ParseAll(fn func(flag *Flag, value string) error) {
 
 // SetInterspersed sets whether to support interspersed option/non-option arguments.
 func SetInterspersed(interspersed bool) {
-	CommandLine.SetInterspersed(i
+	CommandLine.SetInterspersed(interspersed)
+}
+
+// Parsed returns true if the command-line flags have been parsed.
+func Parsed() bool {
+	return CommandLine.Parsed()
+}
+
+// CommandLine is the default set of command-line flags, parsed from os.Args.
+var CommandLine = NewFlagSet(os.Args[0], ExitOnError)
+
+// NewFlagSet returns a new, empty flag set with the specified name,
+// error handling property and SortFlags set to true.
+func NewFlagSet(name string, errorHandling ErrorHandling) *FlagSet {
+	f := &FlagSet{
+		name:          name,
+		errorHandling: errorHandling,
+		argsLenAtDash: -1,
+		interspersed:  true,
+		SortFlags:     true,
+	}
+	return f
+}
+
+// SetInterspersed sets whether to support interspersed option/non-option arguments.
+func (f *FlagSet) SetInterspersed(interspersed bool) {
+	f.interspersed = interspersed
+}
+
+// Init sets the name and error handling property for a flag set.
+// By default, the zero FlagSet uses an empty name and the
+// ContinueOnError error handling policy.
+func (f *FlagSet) Init(name string, errorHandling ErrorHandling) {
+	f.name = name
+	f.errorHandling = errorHandling
+	f.argsLenAtDash = -1
+}
