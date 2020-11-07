@@ -78,4 +78,7 @@ func Int(name string, value int, usage string) *int {
 	return CommandLine.IntP(name, "", value, usage)
 }
 
-// IntP is like Int
+// IntP is like Int, but accepts a shorthand letter that can be used after a single dash.
+func IntP(name, shorthand string, value int, usage string) *int {
+	return CommandLine.IntP(name, shorthand, value, usage)
+}
