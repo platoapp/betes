@@ -69,4 +69,20 @@ func (f *FlagSet) Float32(name string, value float32, usage string) *float32 {
 	return p
 }
 
-// Float32P is like Float32, but accepts a shorthand lette
+// Float32P is like Float32, but accepts a shorthand letter that can be used after a single dash.
+func (f *FlagSet) Float32P(name, shorthand string, value float32, usage string) *float32 {
+	p := new(float32)
+	f.Float32VarP(p, name, shorthand, value, usage)
+	return p
+}
+
+// Float32 defines a float32 flag with specified name, default value, and usage string.
+// The return value is the address of a float32 variable that stores the value of the flag.
+func Float32(name string, value float32, usage string) *float32 {
+	return CommandLine.Float32P(name, "", value, usage)
+}
+
+// Float32P is like Float32, but accepts a shorthand letter that can be used after a single dash.
+func Float32P(name, shorthand string, value float32, usage string) *float32 {
+	return CommandLine.Float32P(name, shorthand, value, usage)
+}
