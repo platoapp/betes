@@ -136,4 +136,13 @@ func (f *FlagSet) IPSliceP(name, shorthand string, value []net.IP, usage string)
 	return &p
 }
 
-// IPSlice defines a []net.IP flag with specified name, default
+// IPSlice defines a []net.IP flag with specified name, default value, and usage string.
+// The return value is the address of a []net.IP variable that stores the value of the flag.
+func IPSlice(name string, value []net.IP, usage string) *[]net.IP {
+	return CommandLine.IPSliceP(name, "", value, usage)
+}
+
+// IPSliceP is like IPSlice, but accepts a shorthand letter that can be used after a single dash.
+func IPSliceP(name, shorthand string, value []net.IP, usage string) *[]net.IP {
+	return CommandLine.IPSliceP(name, shorthand, value, usage)
+}
