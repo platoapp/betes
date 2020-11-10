@@ -89,4 +89,10 @@ func (f *FlagSet) IPNetP(name, shorthand string, value net.IPNet, usage string) 
 // IPNet defines an net.IPNet flag with specified name, default value, and usage string.
 // The return value is the address of an net.IPNet variable that stores the value of the flag.
 func IPNet(name string, value net.IPNet, usage string) *net.IPNet {
-	r
+	return CommandLine.IPNetP(name, "", value, usage)
+}
+
+// IPNetP is like IPNet, but accepts a shorthand letter that can be used after a single dash.
+func IPNetP(name, shorthand string, value net.IPNet, usage string) *net.IPNet {
+	return CommandLine.IPNetP(name, shorthand, value, usage)
+}
