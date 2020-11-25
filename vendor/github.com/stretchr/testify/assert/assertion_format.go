@@ -117,4 +117,87 @@ func Errorf(t TestingT, err error, msg string, args ...interface{}) bool {
 //
 //    assert.Exactlyf(t, int32(123, "error message %s", "formatted"), int64(123))
 func Exactlyf(t TestingT, expected interface{}, actual interface{}, msg string, args ...interface{}) bool {
-	if h, ok := t.(tHelp
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return Exactly(t, expected, actual, append([]interface{}{msg}, args...)...)
+}
+
+// Failf reports a failure through
+func Failf(t TestingT, failureMessage string, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return Fail(t, failureMessage, append([]interface{}{msg}, args...)...)
+}
+
+// FailNowf fails test
+func FailNowf(t TestingT, failureMessage string, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return FailNow(t, failureMessage, append([]interface{}{msg}, args...)...)
+}
+
+// Falsef asserts that the specified value is false.
+//
+//    assert.Falsef(t, myBool, "error message %s", "formatted")
+func Falsef(t TestingT, value bool, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return False(t, value, append([]interface{}{msg}, args...)...)
+}
+
+// FileExistsf checks whether a file exists in the given path. It also fails if the path points to a directory or there is an error when trying to check the file.
+func FileExistsf(t TestingT, path string, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return FileExists(t, path, append([]interface{}{msg}, args...)...)
+}
+
+// HTTPBodyContainsf asserts that a specified handler returns a
+// body that contains a string.
+//
+//  assert.HTTPBodyContainsf(t, myHandler, "GET", "www.google.com", nil, "I'm Feeling Lucky", "error message %s", "formatted")
+//
+// Returns whether the assertion was successful (true) or not (false).
+func HTTPBodyContainsf(t TestingT, handler http.HandlerFunc, method string, url string, values url.Values, str interface{}, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return HTTPBodyContains(t, handler, method, url, values, str, append([]interface{}{msg}, args...)...)
+}
+
+// HTTPBodyNotContainsf asserts that a specified handler returns a
+// body that does not contain a string.
+//
+//  assert.HTTPBodyNotContainsf(t, myHandler, "GET", "www.google.com", nil, "I'm Feeling Lucky", "error message %s", "formatted")
+//
+// Returns whether the assertion was successful (true) or not (false).
+func HTTPBodyNotContainsf(t TestingT, handler http.HandlerFunc, method string, url string, values url.Values, str interface{}, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return HTTPBodyNotContains(t, handler, method, url, values, str, append([]interface{}{msg}, args...)...)
+}
+
+// HTTPErrorf asserts that a specified handler returns an error status code.
+//
+//  assert.HTTPErrorf(t, myHandler, "POST", "/a/b/c", url.Values{"a": []string{"b", "c"}}
+//
+// Returns whether the assertion was successful (true, "error message %s", "formatted") or not (false).
+func HTTPErrorf(t TestingT, handler http.HandlerFunc, method string, url string, values url.Values, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return HTTPError(t, handler, method, url, values, append([]interface{}{msg}, args...)...)
+}
+
+// HTTPRedirectf asserts that a specified handler returns a redirect status code.
+//
+//  assert.HTTPRedirectf(t, myHandler, "GET", "/a/b/c", url.Values{"a": []string{"b", "c"}}
+//
+// Returns whether the assertion was successful (true, "error message %s", "formatted") or not (false).
+func HTTPRedirectf(t TestingT, handler http.HandlerF
