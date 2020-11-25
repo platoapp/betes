@@ -200,4 +200,85 @@ func HTTPErrorf(t TestingT, handler http.HandlerFunc, method string, url string,
 //  assert.HTTPRedirectf(t, myHandler, "GET", "/a/b/c", url.Values{"a": []string{"b", "c"}}
 //
 // Returns whether the assertion was successful (true, "error message %s", "formatted") or not (false).
-func HTTPRedirectf(t TestingT, handler http.HandlerF
+func HTTPRedirectf(t TestingT, handler http.HandlerFunc, method string, url string, values url.Values, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return HTTPRedirect(t, handler, method, url, values, append([]interface{}{msg}, args...)...)
+}
+
+// HTTPSuccessf asserts that a specified handler returns a success status code.
+//
+//  assert.HTTPSuccessf(t, myHandler, "POST", "http://www.google.com", nil, "error message %s", "formatted")
+//
+// Returns whether the assertion was successful (true) or not (false).
+func HTTPSuccessf(t TestingT, handler http.HandlerFunc, method string, url string, values url.Values, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return HTTPSuccess(t, handler, method, url, values, append([]interface{}{msg}, args...)...)
+}
+
+// Implementsf asserts that an object is implemented by the specified interface.
+//
+//    assert.Implementsf(t, (*MyInterface, "error message %s", "formatted")(nil), new(MyObject))
+func Implementsf(t TestingT, interfaceObject interface{}, object interface{}, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return Implements(t, interfaceObject, object, append([]interface{}{msg}, args...)...)
+}
+
+// InDeltaf asserts that the two numerals are within delta of each other.
+//
+// 	 assert.InDeltaf(t, math.Pi, (22 / 7.0, "error message %s", "formatted"), 0.01)
+func InDeltaf(t TestingT, expected interface{}, actual interface{}, delta float64, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return InDelta(t, expected, actual, delta, append([]interface{}{msg}, args...)...)
+}
+
+// InDeltaMapValuesf is the same as InDelta, but it compares all values between two maps. Both maps must have exactly the same keys.
+func InDeltaMapValuesf(t TestingT, expected interface{}, actual interface{}, delta float64, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return InDeltaMapValues(t, expected, actual, delta, append([]interface{}{msg}, args...)...)
+}
+
+// InDeltaSlicef is the same as InDelta, except it compares two slices.
+func InDeltaSlicef(t TestingT, expected interface{}, actual interface{}, delta float64, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return InDeltaSlice(t, expected, actual, delta, append([]interface{}{msg}, args...)...)
+}
+
+// InEpsilonf asserts that expected and actual have a relative error less than epsilon
+func InEpsilonf(t TestingT, expected interface{}, actual interface{}, epsilon float64, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return InEpsilon(t, expected, actual, epsilon, append([]interface{}{msg}, args...)...)
+}
+
+// InEpsilonSlicef is the same as InEpsilon, except it compares each value from two slices.
+func InEpsilonSlicef(t TestingT, expected interface{}, actual interface{}, epsilon float64, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return InEpsilonSlice(t, expected, actual, epsilon, append([]interface{}{msg}, args...)...)
+}
+
+// IsTypef asserts that the specified objects are of the same type.
+func IsTypef(t TestingT, expectedType interface{}, object interface{}, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return IsType(t, expectedType, object, append([]interface{}{msg}, args...)...)
+}
+
+// JSONEqf asserts that two JSON strings are equivalent.
+//
+//  assert.JS
