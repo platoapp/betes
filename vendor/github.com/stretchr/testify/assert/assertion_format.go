@@ -281,4 +281,95 @@ func IsTypef(t TestingT, expectedType interface{}, object interface{}, msg strin
 
 // JSONEqf asserts that two JSON strings are equivalent.
 //
-//  assert.JS
+//  assert.JSONEqf(t, `{"hello": "world", "foo": "bar"}`, `{"foo": "bar", "hello": "world"}`, "error message %s", "formatted")
+func JSONEqf(t TestingT, expected string, actual string, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return JSONEq(t, expected, actual, append([]interface{}{msg}, args...)...)
+}
+
+// Lenf asserts that the specified object has specific length.
+// Lenf also fails if the object has a type that len() not accept.
+//
+//    assert.Lenf(t, mySlice, 3, "error message %s", "formatted")
+func Lenf(t TestingT, object interface{}, length int, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return Len(t, object, length, append([]interface{}{msg}, args...)...)
+}
+
+// Nilf asserts that the specified object is nil.
+//
+//    assert.Nilf(t, err, "error message %s", "formatted")
+func Nilf(t TestingT, object interface{}, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return Nil(t, object, append([]interface{}{msg}, args...)...)
+}
+
+// NoErrorf asserts that a function returned no error (i.e. `nil`).
+//
+//   actualObj, err := SomeFunction()
+//   if assert.NoErrorf(t, err, "error message %s", "formatted") {
+// 	   assert.Equal(t, expectedObj, actualObj)
+//   }
+func NoErrorf(t TestingT, err error, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return NoError(t, err, append([]interface{}{msg}, args...)...)
+}
+
+// NotContainsf asserts that the specified string, list(array, slice...) or map does NOT contain the
+// specified substring or element.
+//
+//    assert.NotContainsf(t, "Hello World", "Earth", "error message %s", "formatted")
+//    assert.NotContainsf(t, ["Hello", "World"], "Earth", "error message %s", "formatted")
+//    assert.NotContainsf(t, {"Hello": "World"}, "Earth", "error message %s", "formatted")
+func NotContainsf(t TestingT, s interface{}, contains interface{}, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return NotContains(t, s, contains, append([]interface{}{msg}, args...)...)
+}
+
+// NotEmptyf asserts that the specified object is NOT empty.  I.e. not nil, "", false, 0 or either
+// a slice or a channel with len == 0.
+//
+//  if assert.NotEmptyf(t, obj, "error message %s", "formatted") {
+//    assert.Equal(t, "two", obj[1])
+//  }
+func NotEmptyf(t TestingT, object interface{}, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return NotEmpty(t, object, append([]interface{}{msg}, args...)...)
+}
+
+// NotEqualf asserts that the specified values are NOT equal.
+//
+//    assert.NotEqualf(t, obj1, obj2, "error message %s", "formatted")
+//
+// Pointer variable equality is determined based on the equality of the
+// referenced values (as opposed to the memory addresses).
+func NotEqualf(t TestingT, expected interface{}, actual interface{}, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return NotEqual(t, expected, actual, append([]interface{}{msg}, args...)...)
+}
+
+// NotNilf asserts that the specified object is not nil.
+//
+//    assert.NotNilf(t, err, "error message %s", "formatted")
+func NotNilf(t TestingT, object interface{}, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return NotNil(t, object, append([]interface{}{msg}, args...)...)
+}
+
+// NotPanicsf asserts that the code inside the specified Pa
