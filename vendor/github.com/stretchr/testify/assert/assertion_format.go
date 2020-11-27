@@ -372,4 +372,90 @@ func NotNilf(t TestingT, object interface{}, msg string, args ...interface{}) bo
 	return NotNil(t, object, append([]interface{}{msg}, args...)...)
 }
 
-// NotPanicsf asserts that the code inside the specified Pa
+// NotPanicsf asserts that the code inside the specified PanicTestFunc does NOT panic.
+//
+//   assert.NotPanicsf(t, func(){ RemainCalm() }, "error message %s", "formatted")
+func NotPanicsf(t TestingT, f PanicTestFunc, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return NotPanics(t, f, append([]interface{}{msg}, args...)...)
+}
+
+// NotRegexpf asserts that a specified regexp does not match a string.
+//
+//  assert.NotRegexpf(t, regexp.MustCompile("starts", "error message %s", "formatted"), "it's starting")
+//  assert.NotRegexpf(t, "^start", "it's not starting", "error message %s", "formatted")
+func NotRegexpf(t TestingT, rx interface{}, str interface{}, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return NotRegexp(t, rx, str, append([]interface{}{msg}, args...)...)
+}
+
+// NotSubsetf asserts that the specified list(array, slice...) contains not all
+// elements given in the specified subset(array, slice...).
+//
+//    assert.NotSubsetf(t, [1, 3, 4], [1, 2], "But [1, 3, 4] does not contain [1, 2]", "error message %s", "formatted")
+func NotSubsetf(t TestingT, list interface{}, subset interface{}, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return NotSubset(t, list, subset, append([]interface{}{msg}, args...)...)
+}
+
+// NotZerof asserts that i is not the zero value for its type.
+func NotZerof(t TestingT, i interface{}, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return NotZero(t, i, append([]interface{}{msg}, args...)...)
+}
+
+// Panicsf asserts that the code inside the specified PanicTestFunc panics.
+//
+//   assert.Panicsf(t, func(){ GoCrazy() }, "error message %s", "formatted")
+func Panicsf(t TestingT, f PanicTestFunc, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return Panics(t, f, append([]interface{}{msg}, args...)...)
+}
+
+// PanicsWithValuef asserts that the code inside the specified PanicTestFunc panics, and that
+// the recovered panic value equals the expected panic value.
+//
+//   assert.PanicsWithValuef(t, "crazy error", func(){ GoCrazy() }, "error message %s", "formatted")
+func PanicsWithValuef(t TestingT, expected interface{}, f PanicTestFunc, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return PanicsWithValue(t, expected, f, append([]interface{}{msg}, args...)...)
+}
+
+// Regexpf asserts that a specified regexp matches a string.
+//
+//  assert.Regexpf(t, regexp.MustCompile("start", "error message %s", "formatted"), "it's starting")
+//  assert.Regexpf(t, "start...$", "it's not starting", "error message %s", "formatted")
+func Regexpf(t TestingT, rx interface{}, str interface{}, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return Regexp(t, rx, str, append([]interface{}{msg}, args...)...)
+}
+
+// Subsetf asserts that the specified list(array, slice...) contains all
+// elements given in the specified subset(array, slice...).
+//
+//    assert.Subsetf(t, [1, 2, 3], [1, 2], "But [1, 2, 3] does contain [1, 2]", "error message %s", "formatted")
+func Subsetf(t TestingT, list interface{}, subset interface{}, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return Subset(t, list, subset, append([]interface{}{msg}, args...)...)
+}
+
+// Truef asserts that the specified value is true.
+//
+//    assert.Truef(t, myBool, "error message %s", "formatted")
+func Truef(t TestingT, value b
