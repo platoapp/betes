@@ -458,4 +458,27 @@ func Subsetf(t TestingT, list interface{}, subset interface{}, msg string, args 
 // Truef asserts that the specified value is true.
 //
 //    assert.Truef(t, myBool, "error message %s", "formatted")
-func Truef(t TestingT, value b
+func Truef(t TestingT, value bool, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return True(t, value, append([]interface{}{msg}, args...)...)
+}
+
+// WithinDurationf asserts that the two times are within duration delta of each other.
+//
+//   assert.WithinDurationf(t, time.Now(), time.Now(), 10*time.Second, "error message %s", "formatted")
+func WithinDurationf(t TestingT, expected time.Time, actual time.Time, delta time.Duration, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return WithinDuration(t, expected, actual, delta, append([]interface{}{msg}, args...)...)
+}
+
+// Zerof asserts that i is the zero value for its type.
+func Zerof(t TestingT, i interface{}, msg string, args ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	return Zero(t, i, append([]interface{}{msg}, args...)...)
+}
