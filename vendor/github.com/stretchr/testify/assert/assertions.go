@@ -286,4 +286,105 @@ func labeledOutput(content ...labeledContent) string {
 	return output
 }
 
-// Implements asserts that an
+// Implements asserts that an object is implemented by the specified interface.
+//
+//    assert.Implements(t, (*MyInterface)(nil), new(MyObject))
+func Implements(t TestingT, interfaceObject interface{}, object interface{}, msgAndArgs ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	interfaceType := reflect.TypeOf(interfaceObject).Elem()
+
+	if object == nil {
+		return Fail(t, fmt.Sprintf("Cannot check if nil implements %v", interfaceType), msgAndArgs...)
+	}
+	if !reflect.TypeOf(object).Implements(interfaceType) {
+		return Fail(t, fmt.Sprintf("%T must implement %v", object, interfaceType), msgAndArgs...)
+	}
+
+	return true
+}
+
+// IsType asserts that the specified objects are of the same type.
+func IsType(t TestingT, expectedType interface{}, object interface{}, msgAndArgs ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+
+	if !ObjectsAreEqual(reflect.TypeOf(object), reflect.TypeOf(expectedType)) {
+		return Fail(t, fmt.Sprintf("Object expected to be of type %v, but was %v", reflect.TypeOf(expectedType), reflect.TypeOf(object)), msgAndArgs...)
+	}
+
+	return true
+}
+
+// Equal asserts that two objects are equal.
+//
+//    assert.Equal(t, 123, 123)
+//
+// Pointer variable equality is determined based on the equality of the
+// referenced values (as opposed to the memory addresses). Function equality
+// cannot be determined and will always fail.
+func Equal(t TestingT, expected, actual interface{}, msgAndArgs ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	if err := validateEqualArgs(expected, actual); err != nil {
+		return Fail(t, fmt.Sprintf("Invalid operation: %#v == %#v (%s)",
+			expected, actual, err), msgAndArgs...)
+	}
+
+	if !ObjectsAreEqual(expected, actual) {
+		diff := diff(expected, actual)
+		expected, actual = formatUnequalValues(expected, actual)
+		return Fail(t, fmt.Sprintf("Not equal: \n"+
+			"expected: %s\n"+
+			"actual  : %s%s", expected, actual, diff), msgAndArgs...)
+	}
+
+	return true
+
+}
+
+// formatUnequalValues takes two values of arbitrary types and returns string
+// representations appropriate to be presented to the user.
+//
+// If the values are not of like type, the returned strings will be prefixed
+// with the type name, and the value will be enclosed in parenthesis similar
+// to a type conversion in the Go grammar.
+func formatUnequalValues(expected, actual interface{}) (e string, a string) {
+	if reflect.TypeOf(expected) != reflect.TypeOf(actual) {
+		return fmt.Sprintf("%T(%#v)", expected, expected),
+			fmt.Sprintf("%T(%#v)", actual, actual)
+	}
+
+	return fmt.Sprintf("%#v", expected),
+		fmt.Sprintf("%#v", actual)
+}
+
+// EqualValues asserts that two objects are equal or convertable to the same types
+// and equal.
+//
+//    assert.EqualValues(t, uint32(123), int32(123))
+func EqualValues(t TestingT, expected, actual interface{}, msgAndArgs ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+
+	if !ObjectsAreEqualValues(expected, actual) {
+		diff := diff(expected, actual)
+		expected, actual = formatUnequalValues(expected, actual)
+		return Fail(t, fmt.Sprintf("Not equal: \n"+
+			"expected: %s\n"+
+			"actual  : %s%s", expected, actual, diff), msgAndArgs...)
+	}
+
+	return true
+
+}
+
+// Exactly asserts that two objects are equal in value and type.
+//
+//    assert.Exactly(t, int32(123), int64(123))
+func Exactly(t TestingT, expected, actual interface{}, msgAndArgs ...interface{}) bool {
+	if h, ok := t.(
