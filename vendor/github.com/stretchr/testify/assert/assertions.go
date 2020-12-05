@@ -387,4 +387,148 @@ func EqualValues(t TestingT, expected, actual interface{}, msgAndArgs ...interfa
 //
 //    assert.Exactly(t, int32(123), int64(123))
 func Exactly(t TestingT, expected, actual interface{}, msgAndArgs ...interface{}) bool {
-	if h, ok := t.(
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+
+	aType := reflect.TypeOf(expected)
+	bType := reflect.TypeOf(actual)
+
+	if aType != bType {
+		return Fail(t, fmt.Sprintf("Types expected to match exactly\n\t%v != %v", aType, bType), msgAndArgs...)
+	}
+
+	return Equal(t, expected, actual, msgAndArgs...)
+
+}
+
+// NotNil asserts that the specified object is not nil.
+//
+//    assert.NotNil(t, err)
+func NotNil(t TestingT, object interface{}, msgAndArgs ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	if !isNil(object) {
+		return true
+	}
+	return Fail(t, "Expected value not to be nil.", msgAndArgs...)
+}
+
+// isNil checks if a specified object is nil or not, without Failing.
+func isNil(object interface{}) bool {
+	if object == nil {
+		return true
+	}
+
+	value := reflect.ValueOf(object)
+	kind := value.Kind()
+	if kind >= reflect.Chan && kind <= reflect.Slice && value.IsNil() {
+		return true
+	}
+
+	return false
+}
+
+// Nil asserts that the specified object is nil.
+//
+//    assert.Nil(t, err)
+func Nil(t TestingT, object interface{}, msgAndArgs ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	if isNil(object) {
+		return true
+	}
+	return Fail(t, fmt.Sprintf("Expected nil, but got: %#v", object), msgAndArgs...)
+}
+
+// isEmpty gets whether the specified object is considered empty or not.
+func isEmpty(object interface{}) bool {
+
+	// get nil case out of the way
+	if object == nil {
+		return true
+	}
+
+	objValue := reflect.ValueOf(object)
+
+	switch objValue.Kind() {
+	// collection types are empty when they have no element
+	case reflect.Array, reflect.Chan, reflect.Map, reflect.Slice:
+		return objValue.Len() == 0
+	// pointers are empty if nil or if the value they point to is empty
+	case reflect.Ptr:
+		if objValue.IsNil() {
+			return true
+		}
+		deref := objValue.Elem().Interface()
+		return isEmpty(deref)
+	// for all other types, compare against the zero value
+	default:
+		zero := reflect.Zero(objValue.Type())
+		return reflect.DeepEqual(object, zero.Interface())
+	}
+}
+
+// Empty asserts that the specified object is empty.  I.e. nil, "", false, 0 or either
+// a slice or a channel with len == 0.
+//
+//  assert.Empty(t, obj)
+func Empty(t TestingT, object interface{}, msgAndArgs ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+
+	pass := isEmpty(object)
+	if !pass {
+		Fail(t, fmt.Sprintf("Should be empty, but was %v", object), msgAndArgs...)
+	}
+
+	return pass
+
+}
+
+// NotEmpty asserts that the specified object is NOT empty.  I.e. not nil, "", false, 0 or either
+// a slice or a channel with len == 0.
+//
+//  if assert.NotEmpty(t, obj) {
+//    assert.Equal(t, "two", obj[1])
+//  }
+func NotEmpty(t TestingT, object interface{}, msgAndArgs ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+
+	pass := !isEmpty(object)
+	if !pass {
+		Fail(t, fmt.Sprintf("Should NOT be empty, but was %v", object), msgAndArgs...)
+	}
+
+	return pass
+
+}
+
+// getLen try to get length of object.
+// return (false, 0) if impossible.
+func getLen(x interface{}) (ok bool, length int) {
+	v := reflect.ValueOf(x)
+	defer func() {
+		if e := recover(); e != nil {
+			ok = false
+		}
+	}()
+	return true, v.Len()
+}
+
+// Len asserts that the specified object has specific length.
+// Len also fails if the object has a type that len() not accept.
+//
+//    assert.Len(t, mySlice, 3)
+func Len(t TestingT, object interface{}, length int, msgAndArgs ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	ok, l := getLen(object)
+	if !ok {
+		return Fail(t, fmt.Sprintf("\"%s\" could not be applied builtin len()", object), m
