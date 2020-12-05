@@ -531,4 +531,139 @@ func Len(t TestingT, object interface{}, length int, msgAndArgs ...interface{}) 
 	}
 	ok, l := getLen(object)
 	if !ok {
-		return Fail(t, fmt.Sprintf("\"%s\" could not be applied builtin len()", object), m
+		return Fail(t, fmt.Sprintf("\"%s\" could not be applied builtin len()", object), msgAndArgs...)
+	}
+
+	if l != length {
+		return Fail(t, fmt.Sprintf("\"%s\" should have %d item(s), but has %d", object, length, l), msgAndArgs...)
+	}
+	return true
+}
+
+// True asserts that the specified value is true.
+//
+//    assert.True(t, myBool)
+func True(t TestingT, value bool, msgAndArgs ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	if h, ok := t.(interface {
+		Helper()
+	}); ok {
+		h.Helper()
+	}
+
+	if value != true {
+		return Fail(t, "Should be true", msgAndArgs...)
+	}
+
+	return true
+
+}
+
+// False asserts that the specified value is false.
+//
+//    assert.False(t, myBool)
+func False(t TestingT, value bool, msgAndArgs ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+
+	if value != false {
+		return Fail(t, "Should be false", msgAndArgs...)
+	}
+
+	return true
+
+}
+
+// NotEqual asserts that the specified values are NOT equal.
+//
+//    assert.NotEqual(t, obj1, obj2)
+//
+// Pointer variable equality is determined based on the equality of the
+// referenced values (as opposed to the memory addresses).
+func NotEqual(t TestingT, expected, actual interface{}, msgAndArgs ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	if err := validateEqualArgs(expected, actual); err != nil {
+		return Fail(t, fmt.Sprintf("Invalid operation: %#v != %#v (%s)",
+			expected, actual, err), msgAndArgs...)
+	}
+
+	if ObjectsAreEqual(expected, actual) {
+		return Fail(t, fmt.Sprintf("Should not be: %#v\n", actual), msgAndArgs...)
+	}
+
+	return true
+
+}
+
+// containsElement try loop over the list check if the list includes the element.
+// return (false, false) if impossible.
+// return (true, false) if element was not found.
+// return (true, true) if element was found.
+func includeElement(list interface{}, element interface{}) (ok, found bool) {
+
+	listValue := reflect.ValueOf(list)
+	elementValue := reflect.ValueOf(element)
+	defer func() {
+		if e := recover(); e != nil {
+			ok = false
+			found = false
+		}
+	}()
+
+	if reflect.TypeOf(list).Kind() == reflect.String {
+		return true, strings.Contains(listValue.String(), elementValue.String())
+	}
+
+	if reflect.TypeOf(list).Kind() == reflect.Map {
+		mapKeys := listValue.MapKeys()
+		for i := 0; i < len(mapKeys); i++ {
+			if ObjectsAreEqual(mapKeys[i].Interface(), element) {
+				return true, true
+			}
+		}
+		return true, false
+	}
+
+	for i := 0; i < listValue.Len(); i++ {
+		if ObjectsAreEqual(listValue.Index(i).Interface(), element) {
+			return true, true
+		}
+	}
+	return true, false
+
+}
+
+// Contains asserts that the specified string, list(array, slice...) or map contains the
+// specified substring or element.
+//
+//    assert.Contains(t, "Hello World", "World")
+//    assert.Contains(t, ["Hello", "World"], "World")
+//    assert.Contains(t, {"Hello": "World"}, "Hello")
+func Contains(t TestingT, s, contains interface{}, msgAndArgs ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+
+	ok, found := includeElement(s, contains)
+	if !ok {
+		return Fail(t, fmt.Sprintf("\"%s\" could not be applied builtin len()", s), msgAndArgs...)
+	}
+	if !found {
+		return Fail(t, fmt.Sprintf("\"%s\" does not contain \"%s\"", s, contains), msgAndArgs...)
+	}
+
+	return true
+
+}
+
+// NotContains asserts that the specified string, list(array, slice...) or map does NOT contain the
+// specified substring or element.
+//
+//    assert.NotContains(t, "Hello World", "Earth")
+//    assert.NotContains(t, ["Hello", "World"], "Earth")
+//    assert.NotContains(t, {"Hello": "World"}, "Earth
