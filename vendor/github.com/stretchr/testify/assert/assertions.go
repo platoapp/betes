@@ -906,4 +906,133 @@ func PanicsWithValue(t TestingT, expected interface{}, f PanicTestFunc, msgAndAr
 //
 //   assert.NotPanics(t, func(){ RemainCalm() })
 func NotPanics(t TestingT, f PanicTestFunc, msgAndArgs ...interface{}) bool {
-	if h, ok := t.(tHelp
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+
+	if funcDidPanic, panicValue := didPanic(f); funcDidPanic {
+		return Fail(t, fmt.Sprintf("func %#v should not panic\n\tPanic value:\t%v", f, panicValue), msgAndArgs...)
+	}
+
+	return true
+}
+
+// WithinDuration asserts that the two times are within duration delta of each other.
+//
+//   assert.WithinDuration(t, time.Now(), time.Now(), 10*time.Second)
+func WithinDuration(t TestingT, expected, actual time.Time, delta time.Duration, msgAndArgs ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+
+	dt := expected.Sub(actual)
+	if dt < -delta || dt > delta {
+		return Fail(t, fmt.Sprintf("Max difference between %v and %v allowed is %v, but difference was %v", expected, actual, delta, dt), msgAndArgs...)
+	}
+
+	return true
+}
+
+func toFloat(x interface{}) (float64, bool) {
+	var xf float64
+	xok := true
+
+	switch xn := x.(type) {
+	case uint8:
+		xf = float64(xn)
+	case uint16:
+		xf = float64(xn)
+	case uint32:
+		xf = float64(xn)
+	case uint64:
+		xf = float64(xn)
+	case int:
+		xf = float64(xn)
+	case int8:
+		xf = float64(xn)
+	case int16:
+		xf = float64(xn)
+	case int32:
+		xf = float64(xn)
+	case int64:
+		xf = float64(xn)
+	case float32:
+		xf = float64(xn)
+	case float64:
+		xf = float64(xn)
+	case time.Duration:
+		xf = float64(xn)
+	default:
+		xok = false
+	}
+
+	return xf, xok
+}
+
+// InDelta asserts that the two numerals are within delta of each other.
+//
+// 	 assert.InDelta(t, math.Pi, (22 / 7.0), 0.01)
+func InDelta(t TestingT, expected, actual interface{}, delta float64, msgAndArgs ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+
+	af, aok := toFloat(expected)
+	bf, bok := toFloat(actual)
+
+	if !aok || !bok {
+		return Fail(t, fmt.Sprintf("Parameters must be numerical"), msgAndArgs...)
+	}
+
+	if math.IsNaN(af) {
+		return Fail(t, fmt.Sprintf("Expected must not be NaN"), msgAndArgs...)
+	}
+
+	if math.IsNaN(bf) {
+		return Fail(t, fmt.Sprintf("Expected %v with delta %v, but was NaN", expected, delta), msgAndArgs...)
+	}
+
+	dt := af - bf
+	if dt < -delta || dt > delta {
+		return Fail(t, fmt.Sprintf("Max difference between %v and %v allowed is %v, but difference was %v", expected, actual, delta, dt), msgAndArgs...)
+	}
+
+	return true
+}
+
+// InDeltaSlice is the same as InDelta, except it compares two slices.
+func InDeltaSlice(t TestingT, expected, actual interface{}, delta float64, msgAndArgs ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	if expected == nil || actual == nil ||
+		reflect.TypeOf(actual).Kind() != reflect.Slice ||
+		reflect.TypeOf(expected).Kind() != reflect.Slice {
+		return Fail(t, fmt.Sprintf("Parameters must be slice"), msgAndArgs...)
+	}
+
+	actualSlice := reflect.ValueOf(actual)
+	expectedSlice := reflect.ValueOf(expected)
+
+	for i := 0; i < actualSlice.Len(); i++ {
+		result := InDelta(t, actualSlice.Index(i).Interface(), expectedSlice.Index(i).Interface(), delta, msgAndArgs...)
+		if !result {
+			return result
+		}
+	}
+
+	return true
+}
+
+// InDeltaMapValues is the same as InDelta, but it compares all values between two maps. Both maps must have exactly the same keys.
+func InDeltaMapValues(t TestingT, expected, actual interface{}, delta float64, msgAndArgs ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	if expected == nil || actual == nil ||
+		reflect.TypeOf(actual).Kind() != reflect.Map ||
+		reflect.TypeOf(expected).Kind() != reflect.Map {
+		return Fail(t, "Arguments must be maps", msgAndArgs...)
+	}
+
+	expect
