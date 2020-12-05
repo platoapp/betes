@@ -1278,4 +1278,117 @@ func FileExists(t TestingT, path string, msgAndArgs ...interface{}) bool {
 }
 
 // DirExists checks whether a directory exists in the given path. It also fails if the path is a file rather a directory or there is an error checking whether it exists.
-func DirExists(t TestingT, path string, msgAndArgs ...interface{}) bo
+func DirExists(t TestingT, path string, msgAndArgs ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return Fail(t, fmt.Sprintf("unable to find file %q", path), msgAndArgs...)
+		}
+		return Fail(t, fmt.Sprintf("error when running os.Lstat(%q): %s", path, err), msgAndArgs...)
+	}
+	if !info.IsDir() {
+		return Fail(t, fmt.Sprintf("%q is a file", path), msgAndArgs...)
+	}
+	return true
+}
+
+// JSONEq asserts that two JSON strings are equivalent.
+//
+//  assert.JSONEq(t, `{"hello": "world", "foo": "bar"}`, `{"foo": "bar", "hello": "world"}`)
+func JSONEq(t TestingT, expected string, actual string, msgAndArgs ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	var expectedJSONAsInterface, actualJSONAsInterface interface{}
+
+	if err := json.Unmarshal([]byte(expected), &expectedJSONAsInterface); err != nil {
+		return Fail(t, fmt.Sprintf("Expected value ('%s') is not valid json.\nJSON parsing error: '%s'", expected, err.Error()), msgAndArgs...)
+	}
+
+	if err := json.Unmarshal([]byte(actual), &actualJSONAsInterface); err != nil {
+		return Fail(t, fmt.Sprintf("Input ('%s') needs to be valid json.\nJSON parsing error: '%s'", actual, err.Error()), msgAndArgs...)
+	}
+
+	return Equal(t, expectedJSONAsInterface, actualJSONAsInterface, msgAndArgs...)
+}
+
+func typeAndKind(v interface{}) (reflect.Type, reflect.Kind) {
+	t := reflect.TypeOf(v)
+	k := t.Kind()
+
+	if k == reflect.Ptr {
+		t = t.Elem()
+		k = t.Kind()
+	}
+	return t, k
+}
+
+// diff returns a diff of both values as long as both are of the same type and
+// are a struct, map, slice or array. Otherwise it returns an empty string.
+func diff(expected interface{}, actual interface{}) string {
+	if expected == nil || actual == nil {
+		return ""
+	}
+
+	et, ek := typeAndKind(expected)
+	at, _ := typeAndKind(actual)
+
+	if et != at {
+		return ""
+	}
+
+	if ek != reflect.Struct && ek != reflect.Map && ek != reflect.Slice && ek != reflect.Array && ek != reflect.String {
+		return ""
+	}
+
+	var e, a string
+	if ek != reflect.String {
+		e = spewConfig.Sdump(expected)
+		a = spewConfig.Sdump(actual)
+	} else {
+		e = expected.(string)
+		a = actual.(string)
+	}
+
+	diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+		A:        difflib.SplitLines(e),
+		B:        difflib.SplitLines(a),
+		FromFile: "Expected",
+		FromDate: "",
+		ToFile:   "Actual",
+		ToDate:   "",
+		Context:  1,
+	})
+
+	return "\n\nDiff:\n" + diff
+}
+
+// validateEqualArgs checks whether provided arguments can be safely used in the
+// Equal/NotEqual functions.
+func validateEqualArgs(expected, actual interface{}) error {
+	if isFunction(expected) || isFunction(actual) {
+		return errors.New("cannot take func type as argument")
+	}
+	return nil
+}
+
+func isFunction(arg interface{}) bool {
+	if arg == nil {
+		return false
+	}
+	return reflect.TypeOf(arg).Kind() == reflect.Func
+}
+
+var spewConfig = spew.ConfigState{
+	Indent:                  " ",
+	DisablePointerAddresses: true,
+	DisableCapacities:       true,
+	SortKeys:                true,
+}
+
+type tHelper interface {
+	Helper()
+}
