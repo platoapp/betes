@@ -624,3 +624,115 @@ func InDeltaSlicef(t TestingT, expected interface{}, actual interface{}, delta f
 	}
 	t.FailNow()
 }
+
+// InDeltaf asserts that the two numerals are within delta of each other.
+//
+// 	 assert.InDeltaf(t, math.Pi, (22 / 7.0, "error message %s", "formatted"), 0.01)
+func InDeltaf(t TestingT, expected interface{}, actual interface{}, delta float64, msg string, args ...interface{}) {
+	if assert.InDeltaf(t, expected, actual, delta, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// InEpsilon asserts that expected and actual have a relative error less than epsilon
+func InEpsilon(t TestingT, expected interface{}, actual interface{}, epsilon float64, msgAndArgs ...interface{}) {
+	if assert.InEpsilon(t, expected, actual, epsilon, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// InEpsilonSlice is the same as InEpsilon, except it compares each value from two slices.
+func InEpsilonSlice(t TestingT, expected interface{}, actual interface{}, epsilon float64, msgAndArgs ...interface{}) {
+	if assert.InEpsilonSlice(t, expected, actual, epsilon, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// InEpsilonSlicef is the same as InEpsilon, except it compares each value from two slices.
+func InEpsilonSlicef(t TestingT, expected interface{}, actual interface{}, epsilon float64, msg string, args ...interface{}) {
+	if assert.InEpsilonSlicef(t, expected, actual, epsilon, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// InEpsilonf asserts that expected and actual have a relative error less than epsilon
+func InEpsilonf(t TestingT, expected interface{}, actual interface{}, epsilon float64, msg string, args ...interface{}) {
+	if assert.InEpsilonf(t, expected, actual, epsilon, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// IsType asserts that the specified objects are of the same type.
+func IsType(t TestingT, expectedType interface{}, object interface{}, msgAndArgs ...interface{}) {
+	if assert.IsType(t, expectedType, object, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// IsTypef asserts that the specified objects are of the same type.
+func IsTypef(t TestingT, expectedType interface{}, object interface{}, msg string, args ...interface{}) {
+	if assert.IsTypef(t, expectedType, object, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// JSONEq asserts that two JSON strings are equivalent.
+//
+//  assert.JSONEq(t, `{"hello": "world", "foo": "bar"}`, `{"foo": "bar", "hello": "world"}`)
+func JSONEq(t TestingT, expected string, actual string, msgAndArgs ...interface{}) {
+	if assert.JSONEq(t, expected, actual, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// JSONEqf asserts that two JSON strings are equivalent.
+//
+//  assert.JSONEqf(t, `{"hello": "world", "foo": "bar"}`, `{"foo": "bar", "hello": "world"}`, "error message %s", "formatted")
+func JSONEqf(t TestingT, expected string, actual string, msg string, args ...interface{}) {
+	if assert.JSONEqf(t, expected, actual, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// Len asserts that the specified object has specific length.
+// Len also fails if the object has a type that len() not accept.
+//
+//    assert.Len(t, mySlice, 3)
+func Len(t TestingT, object interface{}, length int, msgAndArgs ...interface{}) {
+	if
