@@ -516,4 +516,111 @@ func HTTPRedirectf(t TestingT, handler http.HandlerFunc, method string, url stri
 //
 //  assert.HTTPSuccess(t, myHandler, "POST", "http://www.google.com", nil)
 //
-// Returns wh
+// Returns whether the assertion was successful (true) or not (false).
+func HTTPSuccess(t TestingT, handler http.HandlerFunc, method string, url string, values url.Values, msgAndArgs ...interface{}) {
+	if assert.HTTPSuccess(t, handler, method, url, values, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// HTTPSuccessf asserts that a specified handler returns a success status code.
+//
+//  assert.HTTPSuccessf(t, myHandler, "POST", "http://www.google.com", nil, "error message %s", "formatted")
+//
+// Returns whether the assertion was successful (true) or not (false).
+func HTTPSuccessf(t TestingT, handler http.HandlerFunc, method string, url string, values url.Values, msg string, args ...interface{}) {
+	if assert.HTTPSuccessf(t, handler, method, url, values, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// Implements asserts that an object is implemented by the specified interface.
+//
+//    assert.Implements(t, (*MyInterface)(nil), new(MyObject))
+func Implements(t TestingT, interfaceObject interface{}, object interface{}, msgAndArgs ...interface{}) {
+	if assert.Implements(t, interfaceObject, object, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// Implementsf asserts that an object is implemented by the specified interface.
+//
+//    assert.Implementsf(t, (*MyInterface, "error message %s", "formatted")(nil), new(MyObject))
+func Implementsf(t TestingT, interfaceObject interface{}, object interface{}, msg string, args ...interface{}) {
+	if assert.Implementsf(t, interfaceObject, object, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// InDelta asserts that the two numerals are within delta of each other.
+//
+// 	 assert.InDelta(t, math.Pi, (22 / 7.0), 0.01)
+func InDelta(t TestingT, expected interface{}, actual interface{}, delta float64, msgAndArgs ...interface{}) {
+	if assert.InDelta(t, expected, actual, delta, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// InDeltaMapValues is the same as InDelta, but it compares all values between two maps. Both maps must have exactly the same keys.
+func InDeltaMapValues(t TestingT, expected interface{}, actual interface{}, delta float64, msgAndArgs ...interface{}) {
+	if assert.InDeltaMapValues(t, expected, actual, delta, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// InDeltaMapValuesf is the same as InDelta, but it compares all values between two maps. Both maps must have exactly the same keys.
+func InDeltaMapValuesf(t TestingT, expected interface{}, actual interface{}, delta float64, msg string, args ...interface{}) {
+	if assert.InDeltaMapValuesf(t, expected, actual, delta, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// InDeltaSlice is the same as InDelta, except it compares two slices.
+func InDeltaSlice(t TestingT, expected interface{}, actual interface{}, delta float64, msgAndArgs ...interface{}) {
+	if assert.InDeltaSlice(t, expected, actual, delta, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// InDeltaSlicef is the same as InDelta, except it compares two slices.
+func InDeltaSlicef(t TestingT, expected interface{}, actual interface{}, delta float64, msg string, args ...interface{}) {
+	if assert.InDeltaSlicef(t, expected, actual, delta, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
