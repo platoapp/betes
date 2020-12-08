@@ -735,4 +735,124 @@ func JSONEqf(t TestingT, expected string, actual string, msg string, args ...int
 //
 //    assert.Len(t, mySlice, 3)
 func Len(t TestingT, object interface{}, length int, msgAndArgs ...interface{}) {
-	if
+	if assert.Len(t, object, length, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// Lenf asserts that the specified object has specific length.
+// Lenf also fails if the object has a type that len() not accept.
+//
+//    assert.Lenf(t, mySlice, 3, "error message %s", "formatted")
+func Lenf(t TestingT, object interface{}, length int, msg string, args ...interface{}) {
+	if assert.Lenf(t, object, length, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// Nil asserts that the specified object is nil.
+//
+//    assert.Nil(t, err)
+func Nil(t TestingT, object interface{}, msgAndArgs ...interface{}) {
+	if assert.Nil(t, object, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// Nilf asserts that the specified object is nil.
+//
+//    assert.Nilf(t, err, "error message %s", "formatted")
+func Nilf(t TestingT, object interface{}, msg string, args ...interface{}) {
+	if assert.Nilf(t, object, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// NoError asserts that a function returned no error (i.e. `nil`).
+//
+//   actualObj, err := SomeFunction()
+//   if assert.NoError(t, err) {
+// 	   assert.Equal(t, expectedObj, actualObj)
+//   }
+func NoError(t TestingT, err error, msgAndArgs ...interface{}) {
+	if assert.NoError(t, err, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// NoErrorf asserts that a function returned no error (i.e. `nil`).
+//
+//   actualObj, err := SomeFunction()
+//   if assert.NoErrorf(t, err, "error message %s", "formatted") {
+// 	   assert.Equal(t, expectedObj, actualObj)
+//   }
+func NoErrorf(t TestingT, err error, msg string, args ...interface{}) {
+	if assert.NoErrorf(t, err, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// NotContains asserts that the specified string, list(array, slice...) or map does NOT contain the
+// specified substring or element.
+//
+//    assert.NotContains(t, "Hello World", "Earth")
+//    assert.NotContains(t, ["Hello", "World"], "Earth")
+//    assert.NotContains(t, {"Hello": "World"}, "Earth")
+func NotContains(t TestingT, s interface{}, contains interface{}, msgAndArgs ...interface{}) {
+	if assert.NotContains(t, s, contains, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// NotContainsf asserts that the specified string, list(array, slice...) or map does NOT contain the
+// specified substring or element.
+//
+//    assert.NotContainsf(t, "Hello World", "Earth", "error message %s", "formatted")
+//    assert.NotContainsf(t, ["Hello", "World"], "Earth", "error message %s", "formatted")
+//    assert.NotContainsf(t, {"Hello": "World"}, "Earth", "error message %s", "formatted")
+func NotContainsf(t TestingT, s interface{}, contains interface{}, msg string, args ...interface{}) {
+	if assert.NotContainsf(t, s, contains, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// NotEmpty asserts that the specified object is NOT empty.  I.e. not nil, "", false, 0 or either
+// a slice or a channel with len == 0.
+//
+//  if assert.NotEmpty(t, obj) {
+//    assert.Equal(t, "two", obj[1])
+//  }
+func NotEmpty(t TestingT, object interface{}, msgAndArgs ...interface{}) {
+	if assert.NotEmpty(t, object, msgAndAr
