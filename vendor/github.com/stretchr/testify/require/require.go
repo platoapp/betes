@@ -287,4 +287,137 @@ func Exactly(t TestingT, expected interface{}, actual interface{}, msgAndArgs ..
 //
 //    assert.Exactlyf(t, int32(123, "error message %s", "formatted"), int64(123))
 func Exactlyf(t TestingT, expected interface{}, actual interface{}, msg string, args ...interface{}) {
-	if assert.Exactlyf(t, expected, actual,
+	if assert.Exactlyf(t, expected, actual, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// Fail reports a failure through
+func Fail(t TestingT, failureMessage string, msgAndArgs ...interface{}) {
+	if assert.Fail(t, failureMessage, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// FailNow fails test
+func FailNow(t TestingT, failureMessage string, msgAndArgs ...interface{}) {
+	if assert.FailNow(t, failureMessage, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// FailNowf fails test
+func FailNowf(t TestingT, failureMessage string, msg string, args ...interface{}) {
+	if assert.FailNowf(t, failureMessage, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// Failf reports a failure through
+func Failf(t TestingT, failureMessage string, msg string, args ...interface{}) {
+	if assert.Failf(t, failureMessage, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// False asserts that the specified value is false.
+//
+//    assert.False(t, myBool)
+func False(t TestingT, value bool, msgAndArgs ...interface{}) {
+	if assert.False(t, value, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// Falsef asserts that the specified value is false.
+//
+//    assert.Falsef(t, myBool, "error message %s", "formatted")
+func Falsef(t TestingT, value bool, msg string, args ...interface{}) {
+	if assert.Falsef(t, value, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// FileExists checks whether a file exists in the given path. It also fails if the path points to a directory or there is an error when trying to check the file.
+func FileExists(t TestingT, path string, msgAndArgs ...interface{}) {
+	if assert.FileExists(t, path, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// FileExistsf checks whether a file exists in the given path. It also fails if the path points to a directory or there is an error when trying to check the file.
+func FileExistsf(t TestingT, path string, msg string, args ...interface{}) {
+	if assert.FileExistsf(t, path, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// HTTPBodyContains asserts that a specified handler returns a
+// body that contains a string.
+//
+//  assert.HTTPBodyContains(t, myHandler, "GET", "www.google.com", nil, "I'm Feeling Lucky")
+//
+// Returns whether the assertion was successful (true) or not (false).
+func HTTPBodyContains(t TestingT, handler http.HandlerFunc, method string, url string, values url.Values, str interface{}, msgAndArgs ...interface{}) {
+	if assert.HTTPBodyContains(t, handler, method, url, values, str, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// HTTPBodyContainsf asserts that a specified handler returns a
+// body that contains a string.
+//
+//  assert.HTTPBodyContainsf(t, myHandler, "GET", "www.google.com", nil, "I'm Feeling Lucky", "error message %s", "formatted")
+//
+// Returns whether the assertion was successful (true) or not (false).
+func HTTPBodyContainsf(t TestingT, handler http.HandlerFunc, method string, url string, values url.Values, str interface{}, msg string, args ...interface{}) {
+	if assert.HTTPBodyContainsf(t, handler, method, url, values, str, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// HTTPBodyNotConta
