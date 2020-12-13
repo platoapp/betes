@@ -855,4 +855,130 @@ func NotContainsf(t TestingT, s interface{}, contains interface{}, msg string, a
 //    assert.Equal(t, "two", obj[1])
 //  }
 func NotEmpty(t TestingT, object interface{}, msgAndArgs ...interface{}) {
-	if assert.NotEmpty(t, object, msgAndAr
+	if assert.NotEmpty(t, object, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// NotEmptyf asserts that the specified object is NOT empty.  I.e. not nil, "", false, 0 or either
+// a slice or a channel with len == 0.
+//
+//  if assert.NotEmptyf(t, obj, "error message %s", "formatted") {
+//    assert.Equal(t, "two", obj[1])
+//  }
+func NotEmptyf(t TestingT, object interface{}, msg string, args ...interface{}) {
+	if assert.NotEmptyf(t, object, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// NotEqual asserts that the specified values are NOT equal.
+//
+//    assert.NotEqual(t, obj1, obj2)
+//
+// Pointer variable equality is determined based on the equality of the
+// referenced values (as opposed to the memory addresses).
+func NotEqual(t TestingT, expected interface{}, actual interface{}, msgAndArgs ...interface{}) {
+	if assert.NotEqual(t, expected, actual, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// NotEqualf asserts that the specified values are NOT equal.
+//
+//    assert.NotEqualf(t, obj1, obj2, "error message %s", "formatted")
+//
+// Pointer variable equality is determined based on the equality of the
+// referenced values (as opposed to the memory addresses).
+func NotEqualf(t TestingT, expected interface{}, actual interface{}, msg string, args ...interface{}) {
+	if assert.NotEqualf(t, expected, actual, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// NotNil asserts that the specified object is not nil.
+//
+//    assert.NotNil(t, err)
+func NotNil(t TestingT, object interface{}, msgAndArgs ...interface{}) {
+	if assert.NotNil(t, object, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// NotNilf asserts that the specified object is not nil.
+//
+//    assert.NotNilf(t, err, "error message %s", "formatted")
+func NotNilf(t TestingT, object interface{}, msg string, args ...interface{}) {
+	if assert.NotNilf(t, object, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// NotPanics asserts that the code inside the specified PanicTestFunc does NOT panic.
+//
+//   assert.NotPanics(t, func(){ RemainCalm() })
+func NotPanics(t TestingT, f assert.PanicTestFunc, msgAndArgs ...interface{}) {
+	if assert.NotPanics(t, f, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// NotPanicsf asserts that the code inside the specified PanicTestFunc does NOT panic.
+//
+//   assert.NotPanicsf(t, func(){ RemainCalm() }, "error message %s", "formatted")
+func NotPanicsf(t TestingT, f assert.PanicTestFunc, msg string, args ...interface{}) {
+	if assert.NotPanicsf(t, f, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// NotRegexp asserts that a specified regexp does not match a string.
+//
+//  assert.NotRegexp(t, regexp.MustCompile("starts"), "it's starting")
+//  assert.NotRegexp(t, "^start", "it's not starting")
+func NotRegexp(t TestingT, rx interface{}, str interface{}, msgAndArgs ...interface{}) {
+	if assert.NotRegexp(t, rx, str, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// NotRegexpf asserts that a specified regexp does not match a string.
+//
+//  assert.NotRegexpf(t, regexp.MustCompile("starts", "error message %s", "formatted"), "it's starting")
+//  assert.NotRegexpf(t, "^start", "it's not st
