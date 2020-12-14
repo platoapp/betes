@@ -1096,4 +1096,124 @@ func Panicsf(t TestingT, f assert.PanicTestFunc, msg string, args ...interface{}
 	t.FailNow()
 }
 
-// Regexp asserts that a specified regexp matches a s
+// Regexp asserts that a specified regexp matches a string.
+//
+//  assert.Regexp(t, regexp.MustCompile("start"), "it's starting")
+//  assert.Regexp(t, "start...$", "it's not starting")
+func Regexp(t TestingT, rx interface{}, str interface{}, msgAndArgs ...interface{}) {
+	if assert.Regexp(t, rx, str, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// Regexpf asserts that a specified regexp matches a string.
+//
+//  assert.Regexpf(t, regexp.MustCompile("start", "error message %s", "formatted"), "it's starting")
+//  assert.Regexpf(t, "start...$", "it's not starting", "error message %s", "formatted")
+func Regexpf(t TestingT, rx interface{}, str interface{}, msg string, args ...interface{}) {
+	if assert.Regexpf(t, rx, str, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// Subset asserts that the specified list(array, slice...) contains all
+// elements given in the specified subset(array, slice...).
+//
+//    assert.Subset(t, [1, 2, 3], [1, 2], "But [1, 2, 3] does contain [1, 2]")
+func Subset(t TestingT, list interface{}, subset interface{}, msgAndArgs ...interface{}) {
+	if assert.Subset(t, list, subset, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// Subsetf asserts that the specified list(array, slice...) contains all
+// elements given in the specified subset(array, slice...).
+//
+//    assert.Subsetf(t, [1, 2, 3], [1, 2], "But [1, 2, 3] does contain [1, 2]", "error message %s", "formatted")
+func Subsetf(t TestingT, list interface{}, subset interface{}, msg string, args ...interface{}) {
+	if assert.Subsetf(t, list, subset, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// True asserts that the specified value is true.
+//
+//    assert.True(t, myBool)
+func True(t TestingT, value bool, msgAndArgs ...interface{}) {
+	if assert.True(t, value, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// Truef asserts that the specified value is true.
+//
+//    assert.Truef(t, myBool, "error message %s", "formatted")
+func Truef(t TestingT, value bool, msg string, args ...interface{}) {
+	if assert.Truef(t, value, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// WithinDuration asserts that the two times are within duration delta of each other.
+//
+//   assert.WithinDuration(t, time.Now(), time.Now(), 10*time.Second)
+func WithinDuration(t TestingT, expected time.Time, actual time.Time, delta time.Duration, msgAndArgs ...interface{}) {
+	if assert.WithinDuration(t, expected, actual, delta, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// WithinDurationf asserts that the two times are within duration delta of each other.
+//
+//   assert.WithinDurationf(t, time.Now(), time.Now(), 10*time.Second, "error message %s", "formatted")
+func WithinDurationf(t TestingT, expected time.Time, actual time.Time, delta time.Duration, msg string, args ...interface{}) {
+	if assert.WithinDurationf(t, expected, actual, delta, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// Zero asserts that i is the zero value for its type.
+func Zero(t TestingT, i interface{}, msgAndArgs ...interface{}) {
+	if assert.Zero(t, i, msgAndArgs...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
+
+// Zerof asserts that i is the zero value for its type.
+func Zerof(t TestingT
