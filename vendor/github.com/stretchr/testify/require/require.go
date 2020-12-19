@@ -1216,4 +1216,12 @@ func Zero(t TestingT, i interface{}, msgAndArgs ...interface{}) {
 }
 
 // Zerof asserts that i is the zero value for its type.
-func Zerof(t TestingT
+func Zerof(t TestingT, i interface{}, msg string, args ...interface{}) {
+	if assert.Zerof(t, i, msg, args...) {
+		return
+	}
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	t.FailNow()
+}
