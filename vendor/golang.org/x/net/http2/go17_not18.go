@@ -16,4 +16,21 @@ func cloneTLSConfig(c *tls.Config) *tls.Config {
 		Certificates:                c.Certificates,
 		NameToCertificate:           c.NameToCertificate,
 		GetCertificate:              c.GetCertificate,
-		RootCAs:                     c
+		RootCAs:                     c.RootCAs,
+		NextProtos:                  c.NextProtos,
+		ServerName:                  c.ServerName,
+		ClientAuth:                  c.ClientAuth,
+		ClientCAs:                   c.ClientCAs,
+		InsecureSkipVerify:          c.InsecureSkipVerify,
+		CipherSuites:                c.CipherSuites,
+		PreferServerCipherSuites:    c.PreferServerCipherSuites,
+		SessionTicketsDisabled:      c.SessionTicketsDisabled,
+		SessionTicketKey:            c.SessionTicketKey,
+		ClientSessionCache:          c.ClientSessionCache,
+		MinVersion:                  c.MinVersion,
+		MaxVersion:                  c.MaxVersion,
+		CurvePreferences:            c.CurvePreferences,
+		DynamicRecordSizingDisabled: c.DynamicRecordSizingDisabled,
+		Renegotiation:               c.Renegotiation,
+	}
+}
