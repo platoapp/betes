@@ -65,4 +65,14 @@ func init() {
 		"www-authenticate",
 	} {
 		chk := http.CanonicalHeaderKey(v)
-		commonLowerHeader[chk] = 
+		commonLowerHeader[chk] = v
+		commonCanonHeader[v] = chk
+	}
+}
+
+func lowerHeader(v string) string {
+	if s, ok := commonLowerHeader[v]; ok {
+		return s
+	}
+	return strings.ToLower(v)
+}
