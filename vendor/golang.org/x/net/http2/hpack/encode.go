@@ -225,3 +225,16 @@ func appendHpackString(dst []byte, s string) []byte {
 }
 
 // encodeTypeByte returns type byte. If sensitive is true, type byte
+// for "Never Indexed" representation is returned. If sensitive is
+// false and indexing is true, type byte for "Incremental Indexing"
+// representation is returned. Otherwise, type byte for "Without
+// Indexing" is returned.
+func encodeTypeByte(indexing, sensitive bool) byte {
+	if sensitive {
+		return 0x10
+	}
+	if indexing {
+		return 0x40
+	}
+	return 0
+}
