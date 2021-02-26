@@ -116,4 +116,48 @@ func (p *pipe) closeWithError(dst *error, err error, fn func()) {
 		return
 	}
 	p.readFn = fn
-	if dst == &p
+	if dst == &p.breakErr {
+		p.b = nil
+	}
+	*dst = err
+	p.closeDoneLocked()
+}
+
+// requires p.mu be held.
+func (p *pipe) closeDoneLocked() {
+	if p.donec == nil {
+		return
+	}
+	// Close if unclosed. This isn't racy since we always
+	// hold p.mu while closing.
+	select {
+	case <-p.donec:
+	default:
+		close(p.donec)
+	}
+}
+
+// Err returns the error (if any) first set by BreakWithError or CloseWithError.
+func (p *pipe) Err() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.breakErr != nil {
+		return p.breakErr
+	}
+	return p.err
+}
+
+// Done returns a channel which is closed if and when this pipe is closed
+// with CloseWithError.
+func (p *pipe) Done() <-chan struct{} {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.donec == nil {
+		p.donec = make(chan struct{})
+		if p.err != nil || p.breakErr != nil {
+			// Already hit an error.
+			p.closeDoneLocked()
+		}
+	}
+	return p.donec
+}
