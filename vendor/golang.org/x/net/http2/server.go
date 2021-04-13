@@ -1112,3 +1112,116 @@ func (sc *serverConn) startFrameWrite(wr FrameWriteRequest) {
 var errHandlerPanicked = errors.New("http2: handler panicked")
 
 // wroteFrame is called on the serve goroutine with the result of
+// whatever happened on writeFrameAsync.
+func (sc *serverConn) wroteFrame(res frameWriteResult) {
+	sc.serveG.check()
+	if !sc.writingFrame {
+		panic("internal error: expected to be already writing a frame")
+	}
+	sc.writingFrame = false
+	sc.writingFrameAsync = false
+
+	wr := res.wr
+
+	if writeEndsStream(wr.write) {
+		st := wr.stream
+		if st == nil {
+			panic("internal error: expecting non-nil stream")
+		}
+		switch st.state {
+		case stateOpen:
+			// Here we would go to stateHalfClosedLocal in
+			// theory, but since our handler is done and
+			// the net/http package provides no mechanism
+			// for closing a ResponseWriter while still
+			// reading data (see possible TODO at top of
+			// this file), we go into closed state here
+			// anyway, after telling the peer we're
+			// hanging up on them. We'll transition to
+			// stateClosed after the RST_STREAM frame is
+			// written.
+			st.state = stateHalfClosedLocal
+			// Section 8.1: a server MAY request that the client abort
+			// transmission of a request without error by sending a
+			// RST_STREAM with an error code of NO_ERROR after sending
+			// a complete response.
+			sc.resetStream(streamError(st.id, ErrCodeNo))
+		case stateHalfClosedRemote:
+			sc.closeStream(st, errHandlerComplete)
+		}
+	} else {
+		switch v := wr.write.(type) {
+		case StreamError:
+			// st may be unknown if the RST_STREAM was generated to reject bad input.
+			if st, ok := sc.streams[v.StreamID]; ok {
+				sc.closeStream(st, v)
+			}
+		case handlerPanicRST:
+			sc.closeStream(wr.stream, errHandlerPanicked)
+		}
+	}
+
+	// Reply (if requested) to unblock the ServeHTTP goroutine.
+	wr.replyToWriter(res.err)
+
+	sc.scheduleFrameWrite()
+}
+
+// scheduleFrameWrite tickles the frame writing scheduler.
+//
+// If a frame is already being written, nothing happens. This will be called again
+// when the frame is done being written.
+//
+// If a frame isn't being written we need to send one, the best frame
+// to send is selected, preferring first things that aren't
+// stream-specific (e.g. ACKing settings), and then finding the
+// highest priority stream.
+//
+// If a frame isn't being written and there's nothing else to send, we
+// flush the write buffer.
+func (sc *serverConn) scheduleFrameWrite() {
+	sc.serveG.check()
+	if sc.writingFrame || sc.inFrameScheduleLoop {
+		return
+	}
+	sc.inFrameScheduleLoop = true
+	for !sc.writingFrameAsync {
+		if sc.needToSendGoAway {
+			sc.needToSendGoAway = false
+			sc.startFrameWrite(FrameWriteRequest{
+				write: &writeGoAway{
+					maxStreamID: sc.maxClientStreamID,
+					code:        sc.goAwayCode,
+				},
+			})
+			continue
+		}
+		if sc.needToSendSettingsAck {
+			sc.needToSendSettingsAck = false
+			sc.startFrameWrite(FrameWriteRequest{write: writeSettingsAck{}})
+			continue
+		}
+		if !sc.inGoAway || sc.goAwayCode == ErrCodeNo {
+			if wr, ok := sc.writeSched.Pop(); ok {
+				sc.startFrameWrite(wr)
+				continue
+			}
+		}
+		if sc.needsFrameFlush {
+			sc.startFrameWrite(FrameWriteRequest{write: flushFrameWriter{}})
+			sc.needsFrameFlush = false // after startFrameWrite, since it sets this true
+			continue
+		}
+		break
+	}
+	sc.inFrameScheduleLoop = false
+}
+
+// startGracefulShutdown gracefully shuts down a connection. This
+// sends GOAWAY with ErrCodeNo to tell the client we're gracefully
+// shutting down. The connection isn't closed until all current
+// streams are done.
+//
+// startGracefulShutdown returns immediately; it does not wait until
+// the connection has shut down.
+func (sc *serverConn) sta
