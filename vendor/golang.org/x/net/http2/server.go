@@ -1335,4 +1335,124 @@ func (sc *serverConn) processFrame(f Frame) error {
 	if !sc.sawFirstSettings {
 		if _, ok := f.(*SettingsFrame); !ok {
 			return ConnectionError(ErrCodeProtocol)
-		
+		}
+		sc.sawFirstSettings = true
+	}
+
+	switch f := f.(type) {
+	case *SettingsFrame:
+		return sc.processSettings(f)
+	case *MetaHeadersFrame:
+		return sc.processHeaders(f)
+	case *WindowUpdateFrame:
+		return sc.processWindowUpdate(f)
+	case *PingFrame:
+		return sc.processPing(f)
+	case *DataFrame:
+		return sc.processData(f)
+	case *RSTStreamFrame:
+		return sc.processResetStream(f)
+	case *PriorityFrame:
+		return sc.processPriority(f)
+	case *GoAwayFrame:
+		return sc.processGoAway(f)
+	case *PushPromiseFrame:
+		// A client cannot push. Thus, servers MUST treat the receipt of a PUSH_PROMISE
+		// frame as a connection error (Section 5.4.1) of type PROTOCOL_ERROR.
+		return ConnectionError(ErrCodeProtocol)
+	default:
+		sc.vlogf("http2: server ignoring frame: %v", f.Header())
+		return nil
+	}
+}
+
+func (sc *serverConn) processPing(f *PingFrame) error {
+	sc.serveG.check()
+	if f.IsAck() {
+		// 6.7 PING: " An endpoint MUST NOT respond to PING frames
+		// containing this flag."
+		return nil
+	}
+	if f.StreamID != 0 {
+		// "PING frames are not associated with any individual
+		// stream. If a PING frame is received with a stream
+		// identifier field value other than 0x0, the recipient MUST
+		// respond with a connection error (Section 5.4.1) of type
+		// PROTOCOL_ERROR."
+		return ConnectionError(ErrCodeProtocol)
+	}
+	if sc.inGoAway && sc.goAwayCode != ErrCodeNo {
+		return nil
+	}
+	sc.writeFrame(FrameWriteRequest{write: writePingAck{f}})
+	return nil
+}
+
+func (sc *serverConn) processWindowUpdate(f *WindowUpdateFrame) error {
+	sc.serveG.check()
+	switch {
+	case f.StreamID != 0: // stream-level flow control
+		state, st := sc.state(f.StreamID)
+		if state == stateIdle {
+			// Section 5.1: "Receiving any frame other than HEADERS
+			// or PRIORITY on a stream in this state MUST be
+			// treated as a connection error (Section 5.4.1) of
+			// type PROTOCOL_ERROR."
+			return ConnectionError(ErrCodeProtocol)
+		}
+		if st == nil {
+			// "WINDOW_UPDATE can be sent by a peer that has sent a
+			// frame bearing the END_STREAM flag. This means that a
+			// receiver could receive a WINDOW_UPDATE frame on a "half
+			// closed (remote)" or "closed" stream. A receiver MUST
+			// NOT treat this as an error, see Section 5.1."
+			return nil
+		}
+		if !st.flow.add(int32(f.Increment)) {
+			return streamError(f.StreamID, ErrCodeFlowControl)
+		}
+	default: // connection-level flow control
+		if !sc.flow.add(int32(f.Increment)) {
+			return goAwayFlowError{}
+		}
+	}
+	sc.scheduleFrameWrite()
+	return nil
+}
+
+func (sc *serverConn) processResetStream(f *RSTStreamFrame) error {
+	sc.serveG.check()
+
+	state, st := sc.state(f.StreamID)
+	if state == stateIdle {
+		// 6.4 "RST_STREAM frames MUST NOT be sent for a
+		// stream in the "idle" state. If a RST_STREAM frame
+		// identifying an idle stream is received, the
+		// recipient MUST treat this as a connection error
+		// (Section 5.4.1) of type PROTOCOL_ERROR.
+		return ConnectionError(ErrCodeProtocol)
+	}
+	if st != nil {
+		st.cancelCtx()
+		sc.closeStream(st, streamError(f.StreamID, f.ErrCode))
+	}
+	return nil
+}
+
+func (sc *serverConn) closeStream(st *stream, err error) {
+	sc.serveG.check()
+	if st.state == stateIdle || st.state == stateClosed {
+		panic(fmt.Sprintf("invariant; can't close stream in state %v", st.state))
+	}
+	st.state = stateClosed
+	if st.writeDeadline != nil {
+		st.writeDeadline.Stop()
+	}
+	if st.isPushed() {
+		sc.curPushedStreams--
+	} else {
+		sc.curClientStreams--
+	}
+	delete(sc.streams, st.id)
+	if len(sc.streams) == 0 {
+		sc.setConnStat
