@@ -1672,4 +1672,113 @@ func (st *stream) endStream() {
 		st.body.closeWithErrorAndCode(io.EOF, st.copyTrailersToHandlerRequest)
 		st.body.CloseWithError(io.EOF)
 	}
-	st.state = stateH
+	st.state = stateHalfClosedRemote
+}
+
+// copyTrailersToHandlerRequest is run in the Handler's goroutine in
+// its Request.Body.Read just before it gets io.EOF.
+func (st *stream) copyTrailersToHandlerRequest() {
+	for k, vv := range st.trailer {
+		if _, ok := st.reqTrailer[k]; ok {
+			// Only copy it over it was pre-declared.
+			st.reqTrailer[k] = vv
+		}
+	}
+}
+
+// onWriteTimeout is run on its own goroutine (from time.AfterFunc)
+// when the stream's WriteTimeout has fired.
+func (st *stream) onWriteTimeout() {
+	st.sc.writeFrameFromHandler(FrameWriteRequest{write: streamError(st.id, ErrCodeInternal)})
+}
+
+func (sc *serverConn) processHeaders(f *MetaHeadersFrame) error {
+	sc.serveG.check()
+	id := f.StreamID
+	if sc.inGoAway {
+		// Ignore.
+		return nil
+	}
+	// http://tools.ietf.org/html/rfc7540#section-5.1.1
+	// Streams initiated by a client MUST use odd-numbered stream
+	// identifiers. [...] An endpoint that receives an unexpected
+	// stream identifier MUST respond with a connection error
+	// (Section 5.4.1) of type PROTOCOL_ERROR.
+	if id%2 != 1 {
+		return ConnectionError(ErrCodeProtocol)
+	}
+	// A HEADERS frame can be used to create a new stream or
+	// send a trailer for an open one. If we already have a stream
+	// open, let it process its own HEADERS frame (trailers at this
+	// point, if it's valid).
+	if st := sc.streams[f.StreamID]; st != nil {
+		if st.resetQueued {
+			// We're sending RST_STREAM to close the stream, so don't bother
+			// processing this frame.
+			return nil
+		}
+		return st.processTrailerHeaders(f)
+	}
+
+	// [...] The identifier of a newly established stream MUST be
+	// numerically greater than all streams that the initiating
+	// endpoint has opened or reserved. [...]  An endpoint that
+	// receives an unexpected stream identifier MUST respond with
+	// a connection error (Section 5.4.1) of type PROTOCOL_ERROR.
+	if id <= sc.maxClientStreamID {
+		return ConnectionError(ErrCodeProtocol)
+	}
+	sc.maxClientStreamID = id
+
+	if sc.idleTimer != nil {
+		sc.idleTimer.Stop()
+	}
+
+	// http://tools.ietf.org/html/rfc7540#section-5.1.2
+	// [...] Endpoints MUST NOT exceed the limit set by their peer. An
+	// endpoint that receives a HEADERS frame that causes their
+	// advertised concurrent stream limit to be exceeded MUST treat
+	// this as a stream error (Section 5.4.2) of type PROTOCOL_ERROR
+	// or REFUSED_STREAM.
+	if sc.curClientStreams+1 > sc.advMaxStreams {
+		if sc.unackedSettings == 0 {
+			// They should know better.
+			return streamError(id, ErrCodeProtocol)
+		}
+		// Assume it's a network race, where they just haven't
+		// received our last SETTINGS update. But actually
+		// this can't happen yet, because we don't yet provide
+		// a way for users to adjust server parameters at
+		// runtime.
+		return streamError(id, ErrCodeRefusedStream)
+	}
+
+	initialState := stateOpen
+	if f.StreamEnded() {
+		initialState = stateHalfClosedRemote
+	}
+	st := sc.newStream(id, 0, initialState)
+
+	if f.HasPriority() {
+		if err := checkPriority(f.StreamID, f.Priority); err != nil {
+			return err
+		}
+		sc.writeSched.AdjustStream(st.id, f.Priority)
+	}
+
+	rw, req, err := sc.newWriterAndRequest(st, f)
+	if err != nil {
+		return err
+	}
+	st.reqTrailer = req.Trailer
+	if st.reqTrailer != nil {
+		st.trailer = make(http.Header)
+	}
+	st.body = req.Body.(*requestBody).pipe // may be nil
+	st.declBodyBytes = req.ContentLength
+
+	handler := sc.handler.ServeHTTP
+	if f.Truncated {
+		// Their header list was too long. Send a 431 error.
+		handler = handleHeaderListTooLong
+	} else if err := checkValidHTTP2RequestHeaders(req.Head
