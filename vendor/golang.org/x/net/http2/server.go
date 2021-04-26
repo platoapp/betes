@@ -1902,4 +1902,137 @@ func (sc *serverConn) newWriterAndRequest(st *stream, f *MetaHeadersFrame) (*res
 	isConnect := rp.method == "CONNECT"
 	if isConnect {
 		if rp.path != "" || rp.scheme != "" || rp.authority == "" {
-			return nil, nil, streamError(f.StreamID, ErrCodePr
+			return nil, nil, streamError(f.StreamID, ErrCodeProtocol)
+		}
+	} else if rp.method == "" || rp.path == "" || (rp.scheme != "https" && rp.scheme != "http") {
+		// See 8.1.2.6 Malformed Requests and Responses:
+		//
+		// Malformed requests or responses that are detected
+		// MUST be treated as a stream error (Section 5.4.2)
+		// of type PROTOCOL_ERROR."
+		//
+		// 8.1.2.3 Request Pseudo-Header Fields
+		// "All HTTP/2 requests MUST include exactly one valid
+		// value for the :method, :scheme, and :path
+		// pseudo-header fields"
+		return nil, nil, streamError(f.StreamID, ErrCodeProtocol)
+	}
+
+	bodyOpen := !f.StreamEnded()
+	if rp.method == "HEAD" && bodyOpen {
+		// HEAD requests can't have bodies
+		return nil, nil, streamError(f.StreamID, ErrCodeProtocol)
+	}
+
+	rp.header = make(http.Header)
+	for _, hf := range f.RegularFields() {
+		rp.header.Add(sc.canonicalHeader(hf.Name), hf.Value)
+	}
+	if rp.authority == "" {
+		rp.authority = rp.header.Get("Host")
+	}
+
+	rw, req, err := sc.newWriterAndRequestNoBody(st, rp)
+	if err != nil {
+		return nil, nil, err
+	}
+	if bodyOpen {
+		if vv, ok := rp.header["Content-Length"]; ok {
+			req.ContentLength, _ = strconv.ParseInt(vv[0], 10, 64)
+		} else {
+			req.ContentLength = -1
+		}
+		req.Body.(*requestBody).pipe = &pipe{
+			b: &dataBuffer{expected: req.ContentLength},
+		}
+	}
+	return rw, req, nil
+}
+
+type requestParam struct {
+	method                  string
+	scheme, authority, path string
+	header                  http.Header
+}
+
+func (sc *serverConn) newWriterAndRequestNoBody(st *stream, rp requestParam) (*responseWriter, *http.Request, error) {
+	sc.serveG.check()
+
+	var tlsState *tls.ConnectionState // nil if not scheme https
+	if rp.scheme == "https" {
+		tlsState = sc.tlsState
+	}
+
+	needsContinue := rp.header.Get("Expect") == "100-continue"
+	if needsContinue {
+		rp.header.Del("Expect")
+	}
+	// Merge Cookie headers into one "; "-delimited value.
+	if cookies := rp.header["Cookie"]; len(cookies) > 1 {
+		rp.header.Set("Cookie", strings.Join(cookies, "; "))
+	}
+
+	// Setup Trailers
+	var trailer http.Header
+	for _, v := range rp.header["Trailer"] {
+		for _, key := range strings.Split(v, ",") {
+			key = http.CanonicalHeaderKey(strings.TrimSpace(key))
+			switch key {
+			case "Transfer-Encoding", "Trailer", "Content-Length":
+				// Bogus. (copy of http1 rules)
+				// Ignore.
+			default:
+				if trailer == nil {
+					trailer = make(http.Header)
+				}
+				trailer[key] = nil
+			}
+		}
+	}
+	delete(rp.header, "Trailer")
+
+	var url_ *url.URL
+	var requestURI string
+	if rp.method == "CONNECT" {
+		url_ = &url.URL{Host: rp.authority}
+		requestURI = rp.authority // mimic HTTP/1 server behavior
+	} else {
+		var err error
+		url_, err = url.ParseRequestURI(rp.path)
+		if err != nil {
+			return nil, nil, streamError(st.id, ErrCodeProtocol)
+		}
+		requestURI = rp.path
+	}
+
+	body := &requestBody{
+		conn:          sc,
+		stream:        st,
+		needsContinue: needsContinue,
+	}
+	req := &http.Request{
+		Method:     rp.method,
+		URL:        url_,
+		RemoteAddr: sc.remoteAddrStr,
+		Header:     rp.header,
+		RequestURI: requestURI,
+		Proto:      "HTTP/2.0",
+		ProtoMajor: 2,
+		ProtoMinor: 0,
+		TLS:        tlsState,
+		Host:       rp.authority,
+		Body:       body,
+		Trailer:    trailer,
+	}
+	req = requestWithContext(req, st.ctx)
+
+	rws := responseWriterStatePool.Get().(*responseWriterState)
+	bwSave := rws.bw
+	*rws = responseWriterState{} // zero all the fields
+	rws.conn = sc
+	rws.bw = bwSave
+	rws.bw.Reset(chunkWriter{rws})
+	rws.stream = st
+	rws.req = req
+	rws.body = body
+
