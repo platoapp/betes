@@ -1781,4 +1781,125 @@ func (sc *serverConn) processHeaders(f *MetaHeadersFrame) error {
 	if f.Truncated {
 		// Their header list was too long. Send a 431 error.
 		handler = handleHeaderListTooLong
-	} else if err := checkValidHTTP2RequestHeaders(req.Head
+	} else if err := checkValidHTTP2RequestHeaders(req.Header); err != nil {
+		handler = new400Handler(err)
+	}
+
+	// The net/http package sets the read deadline from the
+	// http.Server.ReadTimeout during the TLS handshake, but then
+	// passes the connection off to us with the deadline already
+	// set. Disarm it here after the request headers are read,
+	// similar to how the http1 server works. Here it's
+	// technically more like the http1 Server's ReadHeaderTimeout
+	// (in Go 1.8), though. That's a more sane option anyway.
+	if sc.hs.ReadTimeout != 0 {
+		sc.conn.SetReadDeadline(time.Time{})
+	}
+
+	go sc.runHandler(rw, req, handler)
+	return nil
+}
+
+func (st *stream) processTrailerHeaders(f *MetaHeadersFrame) error {
+	sc := st.sc
+	sc.serveG.check()
+	if st.gotTrailerHeader {
+		return ConnectionError(ErrCodeProtocol)
+	}
+	st.gotTrailerHeader = true
+	if !f.StreamEnded() {
+		return streamError(st.id, ErrCodeProtocol)
+	}
+
+	if len(f.PseudoFields()) > 0 {
+		return streamError(st.id, ErrCodeProtocol)
+	}
+	if st.trailer != nil {
+		for _, hf := range f.RegularFields() {
+			key := sc.canonicalHeader(hf.Name)
+			if !ValidTrailerHeader(key) {
+				// TODO: send more details to the peer somehow. But http2 has
+				// no way to send debug data at a stream level. Discuss with
+				// HTTP folk.
+				return streamError(st.id, ErrCodeProtocol)
+			}
+			st.trailer[key] = append(st.trailer[key], hf.Value)
+		}
+	}
+	st.endStream()
+	return nil
+}
+
+func checkPriority(streamID uint32, p PriorityParam) error {
+	if streamID == p.StreamDep {
+		// Section 5.3.1: "A stream cannot depend on itself. An endpoint MUST treat
+		// this as a stream error (Section 5.4.2) of type PROTOCOL_ERROR."
+		// Section 5.3.3 says that a stream can depend on one of its dependencies,
+		// so it's only self-dependencies that are forbidden.
+		return streamError(streamID, ErrCodeProtocol)
+	}
+	return nil
+}
+
+func (sc *serverConn) processPriority(f *PriorityFrame) error {
+	if sc.inGoAway {
+		return nil
+	}
+	if err := checkPriority(f.StreamID, f.PriorityParam); err != nil {
+		return err
+	}
+	sc.writeSched.AdjustStream(f.StreamID, f.PriorityParam)
+	return nil
+}
+
+func (sc *serverConn) newStream(id, pusherID uint32, state streamState) *stream {
+	sc.serveG.check()
+	if id == 0 {
+		panic("internal error: cannot create stream with id 0")
+	}
+
+	ctx, cancelCtx := contextWithCancel(sc.baseCtx)
+	st := &stream{
+		sc:        sc,
+		id:        id,
+		state:     state,
+		ctx:       ctx,
+		cancelCtx: cancelCtx,
+	}
+	st.cw.Init()
+	st.flow.conn = &sc.flow // link to conn-level counter
+	st.flow.add(sc.initialStreamSendWindowSize)
+	st.inflow.conn = &sc.inflow // link to conn-level counter
+	st.inflow.add(sc.srv.initialStreamRecvWindowSize())
+	if sc.hs.WriteTimeout != 0 {
+		st.writeDeadline = time.AfterFunc(sc.hs.WriteTimeout, st.onWriteTimeout)
+	}
+
+	sc.streams[id] = st
+	sc.writeSched.OpenStream(st.id, OpenStreamOptions{PusherID: pusherID})
+	if st.isPushed() {
+		sc.curPushedStreams++
+	} else {
+		sc.curClientStreams++
+	}
+	if sc.curOpenStreams() == 1 {
+		sc.setConnState(http.StateActive)
+	}
+
+	return st
+}
+
+func (sc *serverConn) newWriterAndRequest(st *stream, f *MetaHeadersFrame) (*responseWriter, *http.Request, error) {
+	sc.serveG.check()
+
+	rp := requestParam{
+		method:    f.PseudoValue("method"),
+		scheme:    f.PseudoValue("scheme"),
+		authority: f.PseudoValue("authority"),
+		path:      f.PseudoValue("path"),
+	}
+
+	isConnect := rp.method == "CONNECT"
+	if isConnect {
+		if rp.path != "" || rp.scheme != "" || rp.authority == "" {
+			return nil, nil, streamError(f.StreamID, ErrCodePr
