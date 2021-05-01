@@ -2273,4 +2273,121 @@ type responseWriterState struct {
 	closeNotifierCh chan bool  // nil until first used
 }
 
-type chunkWriter struct{ rws
+type chunkWriter struct{ rws *responseWriterState }
+
+func (cw chunkWriter) Write(p []byte) (n int, err error) { return cw.rws.writeChunk(p) }
+
+func (rws *responseWriterState) hasTrailers() bool { return len(rws.trailers) != 0 }
+
+// declareTrailer is called for each Trailer header when the
+// response header is written. It notes that a header will need to be
+// written in the trailers at the end of the response.
+func (rws *responseWriterState) declareTrailer(k string) {
+	k = http.CanonicalHeaderKey(k)
+	if !ValidTrailerHeader(k) {
+		// Forbidden by RFC 2616 14.40.
+		rws.conn.logf("ignoring invalid trailer %q", k)
+		return
+	}
+	if !strSliceContains(rws.trailers, k) {
+		rws.trailers = append(rws.trailers, k)
+	}
+}
+
+// writeChunk writes chunks from the bufio.Writer. But because
+// bufio.Writer may bypass its chunking, sometimes p may be
+// arbitrarily large.
+//
+// writeChunk is also responsible (on the first chunk) for sending the
+// HEADER response.
+func (rws *responseWriterState) writeChunk(p []byte) (n int, err error) {
+	if !rws.wroteHeader {
+		rws.writeHeader(200)
+	}
+
+	isHeadResp := rws.req.Method == "HEAD"
+	if !rws.sentHeader {
+		rws.sentHeader = true
+		var ctype, clen string
+		if clen = rws.snapHeader.Get("Content-Length"); clen != "" {
+			rws.snapHeader.Del("Content-Length")
+			clen64, err := strconv.ParseInt(clen, 10, 64)
+			if err == nil && clen64 >= 0 {
+				rws.sentContentLen = clen64
+			} else {
+				clen = ""
+			}
+		}
+		if clen == "" && rws.handlerDone && bodyAllowedForStatus(rws.status) && (len(p) > 0 || !isHeadResp) {
+			clen = strconv.Itoa(len(p))
+		}
+		_, hasContentType := rws.snapHeader["Content-Type"]
+		if !hasContentType && bodyAllowedForStatus(rws.status) && len(p) > 0 {
+			ctype = http.DetectContentType(p)
+		}
+		var date string
+		if _, ok := rws.snapHeader["Date"]; !ok {
+			// TODO(bradfitz): be faster here, like net/http? measure.
+			date = time.Now().UTC().Format(http.TimeFormat)
+		}
+
+		for _, v := range rws.snapHeader["Trailer"] {
+			foreachHeaderElement(v, rws.declareTrailer)
+		}
+
+		endStream := (rws.handlerDone && !rws.hasTrailers() && len(p) == 0) || isHeadResp
+		err = rws.conn.writeHeaders(rws.stream, &writeResHeaders{
+			streamID:      rws.stream.id,
+			httpResCode:   rws.status,
+			h:             rws.snapHeader,
+			endStream:     endStream,
+			contentType:   ctype,
+			contentLength: clen,
+			date:          date,
+		})
+		if err != nil {
+			rws.dirty = true
+			return 0, err
+		}
+		if endStream {
+			return 0, nil
+		}
+	}
+	if isHeadResp {
+		return len(p), nil
+	}
+	if len(p) == 0 && !rws.handlerDone {
+		return 0, nil
+	}
+
+	if rws.handlerDone {
+		rws.promoteUndeclaredTrailers()
+	}
+
+	endStream := rws.handlerDone && !rws.hasTrailers()
+	if len(p) > 0 || endStream {
+		// only send a 0 byte DATA frame if we're ending the stream.
+		if err := rws.conn.writeDataFromHandler(rws.stream, p, endStream); err != nil {
+			rws.dirty = true
+			return 0, err
+		}
+	}
+
+	if rws.handlerDone && rws.hasTrailers() {
+		err = rws.conn.writeHeaders(rws.stream, &writeResHeaders{
+			streamID:  rws.stream.id,
+			h:         rws.handlerHeader,
+			trailers:  rws.trailers,
+			endStream: true,
+		})
+		if err != nil {
+			rws.dirty = true
+		}
+		return len(p), err
+	}
+	return len(p), nil
+}
+
+// TrailerPrefix is a magic prefix for ResponseWriter.Header map keys
+// that, if present, signals that the map entry is actually for
+// the response trailers, and not the response headers. The prefix
