@@ -2153,4 +2153,124 @@ func (sc *serverConn) sendWindowUpdate(st *stream, n int) {
 	// "The legal range for the increment to the flow control
 	// window is 1 to 2^31-1 (2,147,483,647) octets."
 	// A Go Read call on 64-bit machines could in theory read
-	// a larger Read than this. Very unlike
+	// a larger Read than this. Very unlikely, but we handle it here
+	// rather than elsewhere for now.
+	const maxUint31 = 1<<31 - 1
+	for n >= maxUint31 {
+		sc.sendWindowUpdate32(st, maxUint31)
+		n -= maxUint31
+	}
+	sc.sendWindowUpdate32(st, int32(n))
+}
+
+// st may be nil for conn-level
+func (sc *serverConn) sendWindowUpdate32(st *stream, n int32) {
+	sc.serveG.check()
+	if n == 0 {
+		return
+	}
+	if n < 0 {
+		panic("negative update")
+	}
+	var streamID uint32
+	if st != nil {
+		streamID = st.id
+	}
+	sc.writeFrame(FrameWriteRequest{
+		write:  writeWindowUpdate{streamID: streamID, n: uint32(n)},
+		stream: st,
+	})
+	var ok bool
+	if st == nil {
+		ok = sc.inflow.add(n)
+	} else {
+		ok = st.inflow.add(n)
+	}
+	if !ok {
+		panic("internal error; sent too many window updates without decrements?")
+	}
+}
+
+// requestBody is the Handler's Request.Body type.
+// Read and Close may be called concurrently.
+type requestBody struct {
+	stream        *stream
+	conn          *serverConn
+	closed        bool  // for use by Close only
+	sawEOF        bool  // for use by Read only
+	pipe          *pipe // non-nil if we have a HTTP entity message body
+	needsContinue bool  // need to send a 100-continue
+}
+
+func (b *requestBody) Close() error {
+	if b.pipe != nil && !b.closed {
+		b.pipe.BreakWithError(errClosedBody)
+	}
+	b.closed = true
+	return nil
+}
+
+func (b *requestBody) Read(p []byte) (n int, err error) {
+	if b.needsContinue {
+		b.needsContinue = false
+		b.conn.write100ContinueHeaders(b.stream)
+	}
+	if b.pipe == nil || b.sawEOF {
+		return 0, io.EOF
+	}
+	n, err = b.pipe.Read(p)
+	if err == io.EOF {
+		b.sawEOF = true
+	}
+	if b.conn == nil && inTests {
+		return
+	}
+	b.conn.noteBodyReadFromHandler(b.stream, n, err)
+	return
+}
+
+// responseWriter is the http.ResponseWriter implementation. It's
+// intentionally small (1 pointer wide) to minimize garbage. The
+// responseWriterState pointer inside is zeroed at the end of a
+// request (in handlerDone) and calls on the responseWriter thereafter
+// simply crash (caller's mistake), but the much larger responseWriterState
+// and buffers are reused between multiple requests.
+type responseWriter struct {
+	rws *responseWriterState
+}
+
+// Optional http.ResponseWriter interfaces implemented.
+var (
+	_ http.CloseNotifier = (*responseWriter)(nil)
+	_ http.Flusher       = (*responseWriter)(nil)
+	_ stringWriter       = (*responseWriter)(nil)
+)
+
+type responseWriterState struct {
+	// immutable within a request:
+	stream *stream
+	req    *http.Request
+	body   *requestBody // to close at end of request, if DATA frames didn't
+	conn   *serverConn
+
+	// TODO: adjust buffer writing sizes based on server config, frame size updates from peer, etc
+	bw *bufio.Writer // writing to a chunkWriter{this *responseWriterState}
+
+	// mutated by http.Handler goroutine:
+	handlerHeader http.Header // nil until called
+	snapHeader    http.Header // snapshot of handlerHeader at WriteHeader time
+	trailers      []string    // set in writeChunk
+	status        int         // status code passed to WriteHeader
+	wroteHeader   bool        // WriteHeader called (explicitly or implicitly). Not necessarily sent to user yet.
+	sentHeader    bool        // have we sent the header frame?
+	handlerDone   bool        // handler has finished
+	dirty         bool        // a Write failed; don't reuse this responseWriterState
+
+	sentContentLen int64 // non-zero if handler set a Content-Length header
+	wroteBytes     int64
+
+	closeNotifierMu sync.Mutex // guards closeNotifierCh
+	closeNotifierCh chan bool  // nil until first used
+}
+
+type chunkWriter struct{ rws
