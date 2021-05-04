@@ -2491,4 +2491,122 @@ func (w *responseWriter) Header() http.Header {
 }
 
 // checkWriteHeaderCode is a copy of net/http's checkWriteHeaderCode.
-func checkWriteHeaderCode(code 
+func checkWriteHeaderCode(code int) {
+	// Issue 22880: require valid WriteHeader status codes.
+	// For now we only enforce that it's three digits.
+	// In the future we might block things over 599 (600 and above aren't defined
+	// at http://httpwg.org/specs/rfc7231.html#status.codes)
+	// and we might block under 200 (once we have more mature 1xx support).
+	// But for now any three digits.
+	//
+	// We used to send "HTTP/1.1 000 0" on the wire in responses but there's
+	// no equivalent bogus thing we can realistically send in HTTP/2,
+	// so we'll consistently panic instead and help people find their bugs
+	// early. (We can't return an error from WriteHeader even if we wanted to.)
+	if code < 100 || code > 999 {
+		panic(fmt.Sprintf("invalid WriteHeader code %v", code))
+	}
+}
+
+func (w *responseWriter) WriteHeader(code int) {
+	rws := w.rws
+	if rws == nil {
+		panic("WriteHeader called after Handler finished")
+	}
+	rws.writeHeader(code)
+}
+
+func (rws *responseWriterState) writeHeader(code int) {
+	if !rws.wroteHeader {
+		checkWriteHeaderCode(code)
+		rws.wroteHeader = true
+		rws.status = code
+		if len(rws.handlerHeader) > 0 {
+			rws.snapHeader = cloneHeader(rws.handlerHeader)
+		}
+	}
+}
+
+func cloneHeader(h http.Header) http.Header {
+	h2 := make(http.Header, len(h))
+	for k, vv := range h {
+		vv2 := make([]string, len(vv))
+		copy(vv2, vv)
+		h2[k] = vv2
+	}
+	return h2
+}
+
+// The Life Of A Write is like this:
+//
+// * Handler calls w.Write or w.WriteString ->
+// * -> rws.bw (*bufio.Writer) ->
+// * (Handler might call Flush)
+// * -> chunkWriter{rws}
+// * -> responseWriterState.writeChunk(p []byte)
+// * -> responseWriterState.writeChunk (most of the magic; see comment there)
+func (w *responseWriter) Write(p []byte) (n int, err error) {
+	return w.write(len(p), p, "")
+}
+
+func (w *responseWriter) WriteString(s string) (n int, err error) {
+	return w.write(len(s), nil, s)
+}
+
+// either dataB or dataS is non-zero.
+func (w *responseWriter) write(lenData int, dataB []byte, dataS string) (n int, err error) {
+	rws := w.rws
+	if rws == nil {
+		panic("Write called after Handler finished")
+	}
+	if !rws.wroteHeader {
+		w.WriteHeader(200)
+	}
+	if !bodyAllowedForStatus(rws.status) {
+		return 0, http.ErrBodyNotAllowed
+	}
+	rws.wroteBytes += int64(len(dataB)) + int64(len(dataS)) // only one can be set
+	if rws.sentContentLen != 0 && rws.wroteBytes > rws.sentContentLen {
+		// TODO: send a RST_STREAM
+		return 0, errors.New("http2: handler wrote more than declared Content-Length")
+	}
+
+	if dataB != nil {
+		return rws.bw.Write(dataB)
+	} else {
+		return rws.bw.WriteString(dataS)
+	}
+}
+
+func (w *responseWriter) handlerDone() {
+	rws := w.rws
+	dirty := rws.dirty
+	rws.handlerDone = true
+	w.Flush()
+	w.rws = nil
+	if !dirty {
+		// Only recycle the pool if all prior Write calls to
+		// the serverConn goroutine completed successfully. If
+		// they returned earlier due to resets from the peer
+		// there might still be write goroutines outstanding
+		// from the serverConn referencing the rws memory. See
+		// issue 20704.
+		responseWriterStatePool.Put(rws)
+	}
+}
+
+// Push errors.
+var (
+	ErrRecursivePush    = errors.New("http2: recursive push not allowed")
+	ErrPushLimitReached = errors.New("http2: push would exceed peer's SETTINGS_MAX_CONCURRENT_STREAMS")
+)
+
+// pushOptions is the internal version of http.PushOptions, which we
+// cannot include here because it's only defined in Go 1.8 and later.
+type pushOptions struct {
+	Method string
+	Header http.Header
+}
+
+func (w *responseWriter) push(target string, opts pushOptions) error {
+	st := w.rws.s
