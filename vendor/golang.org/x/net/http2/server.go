@@ -2391,3 +2391,104 @@ func (rws *responseWriterState) writeChunk(p []byte) (n int, err error) {
 // TrailerPrefix is a magic prefix for ResponseWriter.Header map keys
 // that, if present, signals that the map entry is actually for
 // the response trailers, and not the response headers. The prefix
+// is stripped after the ServeHTTP call finishes and the values are
+// sent in the trailers.
+//
+// This mechanism is intended only for trailers that are not known
+// prior to the headers being written. If the set of trailers is fixed
+// or known before the header is written, the normal Go trailers mechanism
+// is preferred:
+//    https://golang.org/pkg/net/http/#ResponseWriter
+//    https://golang.org/pkg/net/http/#example_ResponseWriter_trailers
+const TrailerPrefix = "Trailer:"
+
+// promoteUndeclaredTrailers permits http.Handlers to set trailers
+// after the header has already been flushed. Because the Go
+// ResponseWriter interface has no way to set Trailers (only the
+// Header), and because we didn't want to expand the ResponseWriter
+// interface, and because nobody used trailers, and because RFC 2616
+// says you SHOULD (but not must) predeclare any trailers in the
+// header, the official ResponseWriter rules said trailers in Go must
+// be predeclared, and then we reuse the same ResponseWriter.Header()
+// map to mean both Headers and Trailers. When it's time to write the
+// Trailers, we pick out the fields of Headers that were declared as
+// trailers. That worked for a while, until we found the first major
+// user of Trailers in the wild: gRPC (using them only over http2),
+// and gRPC libraries permit setting trailers mid-stream without
+// predeclarnig them. So: change of plans. We still permit the old
+// way, but we also permit this hack: if a Header() key begins with
+// "Trailer:", the suffix of that key is a Trailer. Because ':' is an
+// invalid token byte anyway, there is no ambiguity. (And it's already
+// filtered out) It's mildly hacky, but not terrible.
+//
+// This method runs after the Handler is done and promotes any Header
+// fields to be trailers.
+func (rws *responseWriterState) promoteUndeclaredTrailers() {
+	for k, vv := range rws.handlerHeader {
+		if !strings.HasPrefix(k, TrailerPrefix) {
+			continue
+		}
+		trailerKey := strings.TrimPrefix(k, TrailerPrefix)
+		rws.declareTrailer(trailerKey)
+		rws.handlerHeader[http.CanonicalHeaderKey(trailerKey)] = vv
+	}
+
+	if len(rws.trailers) > 1 {
+		sorter := sorterPool.Get().(*sorter)
+		sorter.SortStrings(rws.trailers)
+		sorterPool.Put(sorter)
+	}
+}
+
+func (w *responseWriter) Flush() {
+	rws := w.rws
+	if rws == nil {
+		panic("Header called after Handler finished")
+	}
+	if rws.bw.Buffered() > 0 {
+		if err := rws.bw.Flush(); err != nil {
+			// Ignore the error. The frame writer already knows.
+			return
+		}
+	} else {
+		// The bufio.Writer won't call chunkWriter.Write
+		// (writeChunk with zero bytes, so we have to do it
+		// ourselves to force the HTTP response header and/or
+		// final DATA frame (with END_STREAM) to be sent.
+		rws.writeChunk(nil)
+	}
+}
+
+func (w *responseWriter) CloseNotify() <-chan bool {
+	rws := w.rws
+	if rws == nil {
+		panic("CloseNotify called after Handler finished")
+	}
+	rws.closeNotifierMu.Lock()
+	ch := rws.closeNotifierCh
+	if ch == nil {
+		ch = make(chan bool, 1)
+		rws.closeNotifierCh = ch
+		cw := rws.stream.cw
+		go func() {
+			cw.Wait() // wait for close
+			ch <- true
+		}()
+	}
+	rws.closeNotifierMu.Unlock()
+	return ch
+}
+
+func (w *responseWriter) Header() http.Header {
+	rws := w.rws
+	if rws == nil {
+		panic("Header called after Handler finished")
+	}
+	if rws.handlerHeader == nil {
+		rws.handlerHeader = make(http.Header)
+	}
+	return rws.handlerHeader
+}
+
+// checkWriteHeaderCode is a copy of net/http's checkWriteHeaderCode.
+func checkWriteHeaderCode(code 
