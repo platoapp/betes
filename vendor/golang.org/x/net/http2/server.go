@@ -2609,4 +2609,128 @@ type pushOptions struct {
 }
 
 func (w *responseWriter) push(target string, opts pushOptions) error {
-	st := w.rws.s
+	st := w.rws.stream
+	sc := st.sc
+	sc.serveG.checkNotOn()
+
+	// No recursive pushes: "PUSH_PROMISE frames MUST only be sent on a peer-initiated stream."
+	// http://tools.ietf.org/html/rfc7540#section-6.6
+	if st.isPushed() {
+		return ErrRecursivePush
+	}
+
+	// Default options.
+	if opts.Method == "" {
+		opts.Method = "GET"
+	}
+	if opts.Header == nil {
+		opts.Header = http.Header{}
+	}
+	wantScheme := "http"
+	if w.rws.req.TLS != nil {
+		wantScheme = "https"
+	}
+
+	// Validate the request.
+	u, err := url.Parse(target)
+	if err != nil {
+		return err
+	}
+	if u.Scheme == "" {
+		if !strings.HasPrefix(target, "/") {
+			return fmt.Errorf("target must be an absolute URL or an absolute path: %q", target)
+		}
+		u.Scheme = wantScheme
+		u.Host = w.rws.req.Host
+	} else {
+		if u.Scheme != wantScheme {
+			return fmt.Errorf("cannot push URL with scheme %q from request with scheme %q", u.Scheme, wantScheme)
+		}
+		if u.Host == "" {
+			return errors.New("URL must have a host")
+		}
+	}
+	for k := range opts.Header {
+		if strings.HasPrefix(k, ":") {
+			return fmt.Errorf("promised request headers cannot include pseudo header %q", k)
+		}
+		// These headers are meaningful only if the request has a body,
+		// but PUSH_PROMISE requests cannot have a body.
+		// http://tools.ietf.org/html/rfc7540#section-8.2
+		// Also disallow Host, since the promised URL must be absolute.
+		switch strings.ToLower(k) {
+		case "content-length", "content-encoding", "trailer", "te", "expect", "host":
+			return fmt.Errorf("promised request headers cannot include %q", k)
+		}
+	}
+	if err := checkValidHTTP2RequestHeaders(opts.Header); err != nil {
+		return err
+	}
+
+	// The RFC effectively limits promised requests to GET and HEAD:
+	// "Promised requests MUST be cacheable [GET, HEAD, or POST], and MUST be safe [GET or HEAD]"
+	// http://tools.ietf.org/html/rfc7540#section-8.2
+	if opts.Method != "GET" && opts.Method != "HEAD" {
+		return fmt.Errorf("method %q must be GET or HEAD", opts.Method)
+	}
+
+	msg := &startPushRequest{
+		parent: st,
+		method: opts.Method,
+		url:    u,
+		header: cloneHeader(opts.Header),
+		done:   errChanPool.Get().(chan error),
+	}
+
+	select {
+	case <-sc.doneServing:
+		return errClientDisconnected
+	case <-st.cw:
+		return errStreamClosed
+	case sc.serveMsgCh <- msg:
+	}
+
+	select {
+	case <-sc.doneServing:
+		return errClientDisconnected
+	case <-st.cw:
+		return errStreamClosed
+	case err := <-msg.done:
+		errChanPool.Put(msg.done)
+		return err
+	}
+}
+
+type startPushRequest struct {
+	parent *stream
+	method string
+	url    *url.URL
+	header http.Header
+	done   chan error
+}
+
+func (sc *serverConn) startPush(msg *startPushRequest) {
+	sc.serveG.check()
+
+	// http://tools.ietf.org/html/rfc7540#section-6.6.
+	// PUSH_PROMISE frames MUST only be sent on a peer-initiated stream that
+	// is in either the "open" or "half-closed (remote)" state.
+	if msg.parent.state != stateOpen && msg.parent.state != stateHalfClosedRemote {
+		// responseWriter.Push checks that the stream is peer-initiaed.
+		msg.done <- errStreamClosed
+		return
+	}
+
+	// http://tools.ietf.org/html/rfc7540#section-6.6.
+	if !sc.pushEnabled {
+		msg.done <- http.ErrNotSupported
+		return
+	}
+
+	// PUSH_PROMISE frames must be sent in increasing order by stream ID, so
+	// we allocate an ID for the promised stream lazily, when the PUSH_PROMISE
+	// is written. Once the ID is allocated, we start the request handler.
+	allocatePromisedID := func() (uint32, error) {
+		sc.serveG.check()
+
+		// Ch
