@@ -2733,4 +2733,111 @@ func (sc *serverConn) startPush(msg *startPushRequest) {
 	allocatePromisedID := func() (uint32, error) {
 		sc.serveG.check()
 
-		// Ch
+		// Check this again, just in case. Technically, we might have received
+		// an updated SETTINGS by the time we got around to writing this frame.
+		if !sc.pushEnabled {
+			return 0, http.ErrNotSupported
+		}
+		// http://tools.ietf.org/html/rfc7540#section-6.5.2.
+		if sc.curPushedStreams+1 > sc.clientMaxStreams {
+			return 0, ErrPushLimitReached
+		}
+
+		// http://tools.ietf.org/html/rfc7540#section-5.1.1.
+		// Streams initiated by the server MUST use even-numbered identifiers.
+		// A server that is unable to establish a new stream identifier can send a GOAWAY
+		// frame so that the client is forced to open a new connection for new streams.
+		if sc.maxPushPromiseID+2 >= 1<<31 {
+			sc.startGracefulShutdownInternal()
+			return 0, ErrPushLimitReached
+		}
+		sc.maxPushPromiseID += 2
+		promisedID := sc.maxPushPromiseID
+
+		// http://tools.ietf.org/html/rfc7540#section-8.2.
+		// Strictly speaking, the new stream should start in "reserved (local)", then
+		// transition to "half closed (remote)" after sending the initial HEADERS, but
+		// we start in "half closed (remote)" for simplicity.
+		// See further comments at the definition of stateHalfClosedRemote.
+		promised := sc.newStream(promisedID, msg.parent.id, stateHalfClosedRemote)
+		rw, req, err := sc.newWriterAndRequestNoBody(promised, requestParam{
+			method:    msg.method,
+			scheme:    msg.url.Scheme,
+			authority: msg.url.Host,
+			path:      msg.url.RequestURI(),
+			header:    cloneHeader(msg.header), // clone since handler runs concurrently with writing the PUSH_PROMISE
+		})
+		if err != nil {
+			// Should not happen, since we've already validated msg.url.
+			panic(fmt.Sprintf("newWriterAndRequestNoBody(%+v): %v", msg.url, err))
+		}
+
+		go sc.runHandler(rw, req, sc.handler.ServeHTTP)
+		return promisedID, nil
+	}
+
+	sc.writeFrame(FrameWriteRequest{
+		write: &writePushPromise{
+			streamID:           msg.parent.id,
+			method:             msg.method,
+			url:                msg.url,
+			h:                  msg.header,
+			allocatePromisedID: allocatePromisedID,
+		},
+		stream: msg.parent,
+		done:   msg.done,
+	})
+}
+
+// foreachHeaderElement splits v according to the "#rule" construction
+// in RFC 2616 section 2.1 and calls fn for each non-empty element.
+func foreachHeaderElement(v string, fn func(string)) {
+	v = textproto.TrimString(v)
+	if v == "" {
+		return
+	}
+	if !strings.Contains(v, ",") {
+		fn(v)
+		return
+	}
+	for _, f := range strings.Split(v, ",") {
+		if f = textproto.TrimString(f); f != "" {
+			fn(f)
+		}
+	}
+}
+
+// From http://httpwg.org/specs/rfc7540.html#rfc.section.8.1.2.2
+var connHeaders = []string{
+	"Connection",
+	"Keep-Alive",
+	"Proxy-Connection",
+	"Transfer-Encoding",
+	"Upgrade",
+}
+
+// checkValidHTTP2RequestHeaders checks whether h is a valid HTTP/2 request,
+// per RFC 7540 Section 8.1.2.2.
+// The returned error is reported to users.
+func checkValidHTTP2RequestHeaders(h http.Header) error {
+	for _, k := range connHeaders {
+		if _, ok := h[k]; ok {
+			return fmt.Errorf("request header %q is not valid in HTTP/2", k)
+		}
+	}
+	te := h["Te"]
+	if len(te) > 0 && (len(te) > 1 || (te[0] != "trailers" && te[0] != "")) {
+		return errors.New(`request header "TE" may only be "trailers" in HTTP/2`)
+	}
+	return nil
+}
+
+func new400Handler(err error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+}
+
+// ValidTrailerHeader reports whether name is a valid header field name to appear
+// in trailers.
+// See: http://tools.ietf.org/html/rfc7230#
