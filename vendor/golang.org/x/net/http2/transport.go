@@ -2229,3 +2229,76 @@ type bodyWriterState struct {
 	resc   chan error    // result of fn's execution
 	delay  time.Duration // how long we should delay a delayed write for
 }
+
+func (t *Transport) getBodyWriterState(cs *clientStream, body io.Reader) (s bodyWriterState) {
+	s.cs = cs
+	if body == nil {
+		return
+	}
+	resc := make(chan error, 1)
+	s.resc = resc
+	s.fn = func() {
+		cs.cc.mu.Lock()
+		cs.startedWrite = true
+		cs.cc.mu.Unlock()
+		resc <- cs.writeRequestBody(body, cs.req.Body)
+	}
+	s.delay = t.expectContinueTimeout()
+	if s.delay == 0 ||
+		!httplex.HeaderValuesContainsToken(
+			cs.req.Header["Expect"],
+			"100-continue") {
+		return
+	}
+	s.fnonce = new(sync.Once)
+
+	// Arm the timer with a very large duration, which we'll
+	// intentionally lower later. It has to be large now because
+	// we need a handle to it before writing the headers, but the
+	// s.delay value is defined to not start until after the
+	// request headers were written.
+	const hugeDuration = 365 * 24 * time.Hour
+	s.timer = time.AfterFunc(hugeDuration, func() {
+		s.fnonce.Do(s.fn)
+	})
+	return
+}
+
+func (s bodyWriterState) cancel() {
+	if s.timer != nil {
+		s.timer.Stop()
+	}
+}
+
+func (s bodyWriterState) on100() {
+	if s.timer == nil {
+		// If we didn't do a delayed write, ignore the server's
+		// bogus 100 continue response.
+		return
+	}
+	s.timer.Stop()
+	go func() { s.fnonce.Do(s.fn) }()
+}
+
+// scheduleBodyWrite starts writing the body, either immediately (in
+// the common case) or after the delay timeout. It should not be
+// called until after the headers have been written.
+func (s bodyWriterState) scheduleBodyWrite() {
+	if s.timer == nil {
+		// We're not doing a delayed write (see
+		// getBodyWriterState), so just start the writing
+		// goroutine immediately.
+		go s.fn()
+		return
+	}
+	traceWait100Continue(s.cs.trace)
+	if s.timer.Stop() {
+		s.timer.Reset(s.delay)
+	}
+}
+
+// isConnectionCloseRequest reports whether req should use its own
+// connection for a single request and then close the connection.
+func isConnectionCloseRequest(req *http.Request) bool {
+	return req.Close || httplex.HeaderValuesContainsToken(req.Header["Connection"], "close")
+}
