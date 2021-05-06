@@ -2840,4 +2840,49 @@ func new400Handler(err error) http.HandlerFunc {
 
 // ValidTrailerHeader reports whether name is a valid header field name to appear
 // in trailers.
-// See: http://tools.ietf.org/html/rfc7230#
+// See: http://tools.ietf.org/html/rfc7230#section-4.1.2
+func ValidTrailerHeader(name string) bool {
+	name = http.CanonicalHeaderKey(name)
+	if strings.HasPrefix(name, "If-") || badTrailer[name] {
+		return false
+	}
+	return true
+}
+
+var badTrailer = map[string]bool{
+	"Authorization":       true,
+	"Cache-Control":       true,
+	"Connection":          true,
+	"Content-Encoding":    true,
+	"Content-Length":      true,
+	"Content-Range":       true,
+	"Content-Type":        true,
+	"Expect":              true,
+	"Host":                true,
+	"Keep-Alive":          true,
+	"Max-Forwards":        true,
+	"Pragma":              true,
+	"Proxy-Authenticate":  true,
+	"Proxy-Authorization": true,
+	"Proxy-Connection":    true,
+	"Range":               true,
+	"Realm":               true,
+	"Te":                  true,
+	"Trailer":             true,
+	"Transfer-Encoding":   true,
+	"Www-Authenticate":    true,
+}
+
+// h1ServerKeepAlivesDisabled reports whether hs has its keep-alives
+// disabled. See comments on h1ServerShutdownChan above for why
+// the code is written this way.
+func h1ServerKeepAlivesDisabled(hs *http.Server) bool {
+	var x interface{} = hs
+	type I interface {
+		doKeepAlives() bool
+	}
+	if hs, ok := x.(I); ok {
+		return !hs.doKeepAlives()
+	}
+	return false
+}
