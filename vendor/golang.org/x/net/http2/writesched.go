@@ -76,4 +76,126 @@ func (wr FrameWriteRequest) StreamID() uint32 {
 	return wr.stream.id
 }
 
-// DataSize returns the number of flow control bytes that m
+// DataSize returns the number of flow control bytes that must be consumed
+// to write this entire frame. This is 0 for non-DATA frames.
+func (wr FrameWriteRequest) DataSize() int {
+	if wd, ok := wr.write.(*writeData); ok {
+		return len(wd.p)
+	}
+	return 0
+}
+
+// Consume consumes min(n, available) bytes from this frame, where available
+// is the number of flow control bytes available on the stream. Consume returns
+// 0, 1, or 2 frames, where the integer return value gives the number of frames
+// returned.
+//
+// If flow control prevents consuming any bytes, this returns (_, _, 0). If
+// the entire frame was consumed, this returns (wr, _, 1). Otherwise, this
+// returns (consumed, rest, 2), where 'consumed' contains the consumed bytes and
+// 'rest' contains the remaining bytes. The consumed bytes are deducted from the
+// underlying stream's flow control budget.
+func (wr FrameWriteRequest) Consume(n int32) (FrameWriteRequest, FrameWriteRequest, int) {
+	var empty FrameWriteRequest
+
+	// Non-DATA frames are always consumed whole.
+	wd, ok := wr.write.(*writeData)
+	if !ok || len(wd.p) == 0 {
+		return wr, empty, 1
+	}
+
+	// Might need to split after applying limits.
+	allowed := wr.stream.flow.available()
+	if n < allowed {
+		allowed = n
+	}
+	if wr.stream.sc.maxFrameSize < allowed {
+		allowed = wr.stream.sc.maxFrameSize
+	}
+	if allowed <= 0 {
+		return empty, empty, 0
+	}
+	if len(wd.p) > int(allowed) {
+		wr.stream.flow.take(allowed)
+		consumed := FrameWriteRequest{
+			stream: wr.stream,
+			write: &writeData{
+				streamID: wd.streamID,
+				p:        wd.p[:allowed],
+				// Even if the original had endStream set, there
+				// are bytes remaining because len(wd.p) > allowed,
+				// so we know endStream is false.
+				endStream: false,
+			},
+			// Our caller is blocking on the final DATA frame, not
+			// this intermediate frame, so no need to wait.
+			done: nil,
+		}
+		rest := FrameWriteRequest{
+			stream: wr.stream,
+			write: &writeData{
+				streamID:  wd.streamID,
+				p:         wd.p[allowed:],
+				endStream: wd.endStream,
+			},
+			done: wr.done,
+		}
+		return consumed, rest, 2
+	}
+
+	// The frame is consumed whole.
+	// NB: This cast cannot overflow because allowed is <= math.MaxInt32.
+	wr.stream.flow.take(int32(len(wd.p)))
+	return wr, empty, 1
+}
+
+// String is for debugging only.
+func (wr FrameWriteRequest) String() string {
+	var des string
+	if s, ok := wr.write.(fmt.Stringer); ok {
+		des = s.String()
+	} else {
+		des = fmt.Sprintf("%T", wr.write)
+	}
+	return fmt.Sprintf("[FrameWriteRequest stream=%d, ch=%v, writer=%v]", wr.StreamID(), wr.done != nil, des)
+}
+
+// replyToWriter sends err to wr.done and panics if the send must block
+// This does nothing if wr.done is nil.
+func (wr *FrameWriteRequest) replyToWriter(err error) {
+	if wr.done == nil {
+		return
+	}
+	select {
+	case wr.done <- err:
+	default:
+		panic(fmt.Sprintf("unbuffered done channel passed in for type %T", wr.write))
+	}
+	wr.write = nil // prevent use (assume it's tainted after wr.done send)
+}
+
+// writeQueue is used by implementations of WriteScheduler.
+type writeQueue struct {
+	s []FrameWriteRequest
+}
+
+func (q *writeQueue) empty() bool { return len(q.s) == 0 }
+
+func (q *writeQueue) push(wr FrameWriteRequest) {
+	q.s = append(q.s, wr)
+}
+
+func (q *writeQueue) shift() FrameWriteRequest {
+	if len(q.s) == 0 {
+		panic("invalid use of queue")
+	}
+	wr := q.s[0]
+	// TODO: less copy-happy queue.
+	copy(q.s, q.s[1:])
+	q.s[len(q.s)-1] = FrameWriteRequest{}
+	q.s = q.s[:len(q.s)-1]
+	return wr
+}
+
+// consume consumes up to n bytes from q.s[0]. If the frame is
+// entirely consumed, it is removed from
