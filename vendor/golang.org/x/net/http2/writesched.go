@@ -198,4 +198,45 @@ func (q *writeQueue) shift() FrameWriteRequest {
 }
 
 // consume consumes up to n bytes from q.s[0]. If the frame is
-// entirely consumed, it is removed from
+// entirely consumed, it is removed from the queue. If the frame
+// is partially consumed, the frame is kept with the consumed
+// bytes removed. Returns true iff any bytes were consumed.
+func (q *writeQueue) consume(n int32) (FrameWriteRequest, bool) {
+	if len(q.s) == 0 {
+		return FrameWriteRequest{}, false
+	}
+	consumed, rest, numresult := q.s[0].Consume(n)
+	switch numresult {
+	case 0:
+		return FrameWriteRequest{}, false
+	case 1:
+		q.shift()
+	case 2:
+		q.s[0] = rest
+	}
+	return consumed, true
+}
+
+type writeQueuePool []*writeQueue
+
+// put inserts an unused writeQueue into the pool.
+func (p *writeQueuePool) put(q *writeQueue) {
+	for i := range q.s {
+		q.s[i] = FrameWriteRequest{}
+	}
+	q.s = q.s[:0]
+	*p = append(*p, q)
+}
+
+// get returns an empty writeQueue.
+func (p *writeQueuePool) get() *writeQueue {
+	ln := len(*p)
+	if ln == 0 {
+		return new(writeQueue)
+	}
+	x := ln - 1
+	q := (*p)[x]
+	(*p)[x] = nil
+	*p = (*p)[:x]
+	return q
+}
