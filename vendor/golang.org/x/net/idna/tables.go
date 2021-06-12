@@ -358,4 +358,106 @@ var xorData string = "" + // Size: 4855 bytes
 	"\x0d\x1b\x03\x0e2=\x03\x0e;\x08\x03\x0e:\x0b\x03\x0e\x06$\x03\x0e\x0d)" +
 	"\x03\x0e\x16\x1f\x03\x0e\x16\x1b\x03\x0d$\x0a\x03\x05,\x1d\x03\x0d. \x03" +
 	"\x0d.#\x03\x0c(/\x03\x09%\x02\x03\x0d90\x03\x0d\x0e4\x03\x0d\x0d\x0f\x03" +
-	"\x
+	"\x0c#\x00\x03\x0c,\x1e\x03\x0c2\x0e\x03\x0c\x01\x17\x03\x0c\x09:\x03\x0e" +
+	"\x173\x03\x0c\x08\x03\x03\x0c\x11\x07\x03\x0c\x10\x18\x03\x0c\x1f\x1c" +
+	"\x03\x0c\x19\x0e\x03\x0c\x1a\x1f\x03\x0f0>\x03\x0b->\x03\x0b<+\x03\x0b8" +
+	"\x13\x03\x0b\x043\x03\x0b\x14\x03\x03\x0b\x16%\x03\x0d\x22&\x03\x0b\x1a" +
+	"\x1a\x03\x0b\x1a\x04\x03\x0a%9\x03\x0a&2\x03\x0a&0\x03\x0a!\x1a\x03\x0a!" +
+	"7\x03\x0a5\x10\x03\x0a=4\x03\x0a?\x0e\x03\x0a>\x10\x03\x0a\x00 \x03\x0a" +
+	"\x0f:\x03\x0a\x0f9\x03\x0a\x0b\x0a\x03\x0a\x17%\x03\x0a\x1b-\x03\x09-" +
+	"\x1a\x03\x09,4\x03\x09.,\x03\x09)\x09\x03\x096!\x03\x091\x1f\x03\x093" +
+	"\x16\x03\x0c+\x1f\x03\x098 \x03\x098=\x03\x0c(\x1a\x03\x0c(\x16\x03\x09" +
+	"\x0a+\x03\x09\x16\x12\x03\x09\x13\x0e\x03\x09\x153\x03\x08)!\x03\x09\x1a" +
+	"\x01\x03\x09\x18\x01\x03\x08%#\x03\x08>\x22\x03\x08\x05%\x03\x08\x02*" +
+	"\x03\x08\x15;\x03\x08\x1b7\x03\x0f\x07\x1d\x03\x0f\x04\x03\x03\x070\x0c" +
+	"\x03\x07;\x0b\x03\x07\x08\x17\x03\x07\x12\x06\x03\x06/-\x03\x0671\x03" +
+	"\x065+\x03\x06>7\x03\x06\x049\x03\x05+\x1e\x03\x05,\x17\x03\x05 \x1d\x03" +
+	"\x05\x22\x05\x03\x050\x1d"
+
+// lookup returns the trie value for the first UTF-8 encoding in s and
+// the width in bytes of this encoding. The size will be 0 if s does not
+// hold enough bytes to complete the encoding. len(s) must be greater than 0.
+func (t *idnaTrie) lookup(s []byte) (v uint16, sz int) {
+	c0 := s[0]
+	switch {
+	case c0 < 0x80: // is ASCII
+		return idnaValues[c0], 1
+	case c0 < 0xC2:
+		return 0, 1 // Illegal UTF-8: not a starter, not ASCII.
+	case c0 < 0xE0: // 2-byte UTF-8
+		if len(s) < 2 {
+			return 0, 0
+		}
+		i := idnaIndex[c0]
+		c1 := s[1]
+		if c1 < 0x80 || 0xC0 <= c1 {
+			return 0, 1 // Illegal UTF-8: not a continuation byte.
+		}
+		return t.lookupValue(uint32(i), c1), 2
+	case c0 < 0xF0: // 3-byte UTF-8
+		if len(s) < 3 {
+			return 0, 0
+		}
+		i := idnaIndex[c0]
+		c1 := s[1]
+		if c1 < 0x80 || 0xC0 <= c1 {
+			return 0, 1 // Illegal UTF-8: not a continuation byte.
+		}
+		o := uint32(i)<<6 + uint32(c1)
+		i = idnaIndex[o]
+		c2 := s[2]
+		if c2 < 0x80 || 0xC0 <= c2 {
+			return 0, 2 // Illegal UTF-8: not a continuation byte.
+		}
+		return t.lookupValue(uint32(i), c2), 3
+	case c0 < 0xF8: // 4-byte UTF-8
+		if len(s) < 4 {
+			return 0, 0
+		}
+		i := idnaIndex[c0]
+		c1 := s[1]
+		if c1 < 0x80 || 0xC0 <= c1 {
+			return 0, 1 // Illegal UTF-8: not a continuation byte.
+		}
+		o := uint32(i)<<6 + uint32(c1)
+		i = idnaIndex[o]
+		c2 := s[2]
+		if c2 < 0x80 || 0xC0 <= c2 {
+			return 0, 2 // Illegal UTF-8: not a continuation byte.
+		}
+		o = uint32(i)<<6 + uint32(c2)
+		i = idnaIndex[o]
+		c3 := s[3]
+		if c3 < 0x80 || 0xC0 <= c3 {
+			return 0, 3 // Illegal UTF-8: not a continuation byte.
+		}
+		return t.lookupValue(uint32(i), c3), 4
+	}
+	// Illegal rune
+	return 0, 1
+}
+
+// lookupUnsafe returns the trie value for the first UTF-8 encoding in s.
+// s must start with a full and valid UTF-8 encoded rune.
+func (t *idnaTrie) lookupUnsafe(s []byte) uint16 {
+	c0 := s[0]
+	if c0 < 0x80 { // is ASCII
+		return idnaValues[c0]
+	}
+	i := idnaIndex[c0]
+	if c0 < 0xE0 { // 2-byte UTF-8
+		return t.lookupValue(uint32(i), s[1])
+	}
+	i = idnaIndex[uint32(i)<<6+uint32(s[1])]
+	if c0 < 0xF0 { // 3-byte UTF-8
+		return t.lookupValue(uint32(i), s[2])
+	}
+	i = idnaIndex[uint32(i)<<6+uint32(s[2])]
+	if c0 < 0xF8 { // 4-byte UTF-8
+		return t.lookupValue(uint32(i), s[3])
+	}
+	return 0
+}
+
+// lookupString returns the trie value for the first UTF-8 encoding in s and
+// the width in bytes of this encoding. The size
