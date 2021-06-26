@@ -460,4 +460,117 @@ func (t *idnaTrie) lookupUnsafe(s []byte) uint16 {
 }
 
 // lookupString returns the trie value for the first UTF-8 encoding in s and
-// the width in bytes of this encoding. The size
+// the width in bytes of this encoding. The size will be 0 if s does not
+// hold enough bytes to complete the encoding. len(s) must be greater than 0.
+func (t *idnaTrie) lookupString(s string) (v uint16, sz int) {
+	c0 := s[0]
+	switch {
+	case c0 < 0x80: // is ASCII
+		return idnaValues[c0], 1
+	case c0 < 0xC2:
+		return 0, 1 // Illegal UTF-8: not a starter, not ASCII.
+	case c0 < 0xE0: // 2-byte UTF-8
+		if len(s) < 2 {
+			return 0, 0
+		}
+		i := idnaIndex[c0]
+		c1 := s[1]
+		if c1 < 0x80 || 0xC0 <= c1 {
+			return 0, 1 // Illegal UTF-8: not a continuation byte.
+		}
+		return t.lookupValue(uint32(i), c1), 2
+	case c0 < 0xF0: // 3-byte UTF-8
+		if len(s) < 3 {
+			return 0, 0
+		}
+		i := idnaIndex[c0]
+		c1 := s[1]
+		if c1 < 0x80 || 0xC0 <= c1 {
+			return 0, 1 // Illegal UTF-8: not a continuation byte.
+		}
+		o := uint32(i)<<6 + uint32(c1)
+		i = idnaIndex[o]
+		c2 := s[2]
+		if c2 < 0x80 || 0xC0 <= c2 {
+			return 0, 2 // Illegal UTF-8: not a continuation byte.
+		}
+		return t.lookupValue(uint32(i), c2), 3
+	case c0 < 0xF8: // 4-byte UTF-8
+		if len(s) < 4 {
+			return 0, 0
+		}
+		i := idnaIndex[c0]
+		c1 := s[1]
+		if c1 < 0x80 || 0xC0 <= c1 {
+			return 0, 1 // Illegal UTF-8: not a continuation byte.
+		}
+		o := uint32(i)<<6 + uint32(c1)
+		i = idnaIndex[o]
+		c2 := s[2]
+		if c2 < 0x80 || 0xC0 <= c2 {
+			return 0, 2 // Illegal UTF-8: not a continuation byte.
+		}
+		o = uint32(i)<<6 + uint32(c2)
+		i = idnaIndex[o]
+		c3 := s[3]
+		if c3 < 0x80 || 0xC0 <= c3 {
+			return 0, 3 // Illegal UTF-8: not a continuation byte.
+		}
+		return t.lookupValue(uint32(i), c3), 4
+	}
+	// Illegal rune
+	return 0, 1
+}
+
+// lookupStringUnsafe returns the trie value for the first UTF-8 encoding in s.
+// s must start with a full and valid UTF-8 encoded rune.
+func (t *idnaTrie) lookupStringUnsafe(s string) uint16 {
+	c0 := s[0]
+	if c0 < 0x80 { // is ASCII
+		return idnaValues[c0]
+	}
+	i := idnaIndex[c0]
+	if c0 < 0xE0 { // 2-byte UTF-8
+		return t.lookupValue(uint32(i), s[1])
+	}
+	i = idnaIndex[uint32(i)<<6+uint32(s[1])]
+	if c0 < 0xF0 { // 3-byte UTF-8
+		return t.lookupValue(uint32(i), s[2])
+	}
+	i = idnaIndex[uint32(i)<<6+uint32(s[2])]
+	if c0 < 0xF8 { // 4-byte UTF-8
+		return t.lookupValue(uint32(i), s[3])
+	}
+	return 0
+}
+
+// idnaTrie. Total size: 29052 bytes (28.37 KiB). Checksum: ef06e7ecc26f36dd.
+type idnaTrie struct{}
+
+func newIdnaTrie(i int) *idnaTrie {
+	return &idnaTrie{}
+}
+
+// lookupValue determines the type of block n and looks up the value for b.
+func (t *idnaTrie) lookupValue(n uint32, b byte) uint16 {
+	switch {
+	case n < 125:
+		return uint16(idnaValues[n<<6+uint32(b)])
+	default:
+		n -= 125
+		return uint16(idnaSparse.lookup(n, b))
+	}
+}
+
+// idnaValues: 127 blocks, 8128 entries, 16256 bytes
+// The third block is the zero block.
+var idnaValues = [8128]uint16{
+	// Block 0x0, offset 0x0
+	0x00: 0x0080, 0x01: 0x0080, 0x02: 0x0080, 0x03: 0x0080, 0x04: 0x0080, 0x05: 0x0080,
+	0x06: 0x0080, 0x07: 0x0080, 0x08: 0x0080, 0x09: 0x0080, 0x0a: 0x0080, 0x0b: 0x0080,
+	0x0c: 0x0080, 0x0d: 0x0080, 0x0e: 0x0080, 0x0f: 0x0080, 0x10: 0x0080, 0x11: 0x0080,
+	0x12: 0x0080, 0x13: 0x0080, 0x14: 0x0080, 0x15: 0x0080, 0x16: 0x0080, 0x17: 0x0080,
+	0x18: 0x0080, 0x19: 0x0080, 0x1a: 0x0080, 0x1b: 0x0080, 0x1c: 0x0080, 0x1d: 0x0080,
+	0x1e: 0x0080, 0x1f: 0x0080, 0x20: 0x0080, 0x21: 0x0080, 0x22: 0x0080, 0x23: 0x0080,
+	0x24: 0x0080, 0x25: 0x0080, 0x26: 0x0080, 0x27: 0x0080, 0x28: 0x0080, 0x29: 0x0080,
+	0x2a: 0x0080, 0x2b: 0x0080, 0x2c: 0x0080, 0x2d: 0x0008, 0x2
