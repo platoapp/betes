@@ -141,4 +141,115 @@ func trimOWS(x string) string {
 // 0#element, in the ABNF extension described in RFC 7230 section 7)
 // contains token amongst its comma-separated tokens, ASCII
 // case-insensitively.
-func he
+func headerValueContainsToken(v string, token string) bool {
+	v = trimOWS(v)
+	if comma := strings.IndexByte(v, ','); comma != -1 {
+		return tokenEqual(trimOWS(v[:comma]), token) || headerValueContainsToken(v[comma+1:], token)
+	}
+	return tokenEqual(v, token)
+}
+
+// lowerASCII returns the ASCII lowercase version of b.
+func lowerASCII(b byte) byte {
+	if 'A' <= b && b <= 'Z' {
+		return b + ('a' - 'A')
+	}
+	return b
+}
+
+// tokenEqual reports whether t1 and t2 are equal, ASCII case-insensitively.
+func tokenEqual(t1, t2 string) bool {
+	if len(t1) != len(t2) {
+		return false
+	}
+	for i, b := range t1 {
+		if b >= utf8.RuneSelf {
+			// No UTF-8 or non-ASCII allowed in tokens.
+			return false
+		}
+		if lowerASCII(byte(b)) != lowerASCII(t2[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// isLWS reports whether b is linear white space, according
+// to http://www.w3.org/Protocols/rfc2616/rfc2616-sec2.html#sec2.2
+//      LWS            = [CRLF] 1*( SP | HT )
+func isLWS(b byte) bool { return b == ' ' || b == '\t' }
+
+// isCTL reports whether b is a control byte, according
+// to http://www.w3.org/Protocols/rfc2616/rfc2616-sec2.html#sec2.2
+//      CTL            = <any US-ASCII control character
+//                       (octets 0 - 31) and DEL (127)>
+func isCTL(b byte) bool {
+	const del = 0x7f // a CTL
+	return b < ' ' || b == del
+}
+
+// ValidHeaderFieldName reports whether v is a valid HTTP/1.x header name.
+// HTTP/2 imposes the additional restriction that uppercase ASCII
+// letters are not allowed.
+//
+//  RFC 7230 says:
+//   header-field   = field-name ":" OWS field-value OWS
+//   field-name     = token
+//   token          = 1*tchar
+//   tchar = "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." /
+//           "^" / "_" / "`" / "|" / "~" / DIGIT / ALPHA
+func ValidHeaderFieldName(v string) bool {
+	if len(v) == 0 {
+		return false
+	}
+	for _, r := range v {
+		if !IsTokenRune(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// ValidHostHeader reports whether h is a valid host header.
+func ValidHostHeader(h string) bool {
+	// The latest spec is actually this:
+	//
+	// http://tools.ietf.org/html/rfc7230#section-5.4
+	//     Host = uri-host [ ":" port ]
+	//
+	// Where uri-host is:
+	//     http://tools.ietf.org/html/rfc3986#section-3.2.2
+	//
+	// But we're going to be much more lenient for now and just
+	// search for any byte that's not a valid byte in any of those
+	// expressions.
+	for i := 0; i < len(h); i++ {
+		if !validHostByte[h[i]] {
+			return false
+		}
+	}
+	return true
+}
+
+// See the validHostHeader comment.
+var validHostByte = [256]bool{
+	'0': true, '1': true, '2': true, '3': true, '4': true, '5': true, '6': true, '7': true,
+	'8': true, '9': true,
+
+	'a': true, 'b': true, 'c': true, 'd': true, 'e': true, 'f': true, 'g': true, 'h': true,
+	'i': true, 'j': true, 'k': true, 'l': true, 'm': true, 'n': true, 'o': true, 'p': true,
+	'q': true, 'r': true, 's': true, 't': true, 'u': true, 'v': true, 'w': true, 'x': true,
+	'y': true, 'z': true,
+
+	'A': true, 'B': true, 'C': true, 'D': true, 'E': true, 'F': true, 'G': true, 'H': true,
+	'I': true, 'J': true, 'K': true, 'L': true, 'M': true, 'N': true, 'O': true, 'P': true,
+	'Q': true, 'R': true, 'S': true, 'T': true, 'U': true, 'V': true, 'W': true, 'X': true,
+	'Y': true, 'Z': true,
+
+	'!':  true, // sub-delims
+	'$':  true, // sub-delims
+	'%':  true, // pct-encoded (and used in IPv6 zones)
+	'&':  true, // sub-delims
+	'(':  true, // sub-delims
+	')':  true, // sub-delims
+	'*':  true, // sub-del
