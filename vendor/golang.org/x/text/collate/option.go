@@ -177,3 +177,63 @@ var (
 	Numeric Option = numeric
 	numeric        = Option{5, numericF}
 )
+
+func ignoreWidthF(o *options) {
+	o.ignore[colltab.Tertiary] = true
+	o.caseLevel = true
+}
+
+func ignoreDiacriticsF(o *options) {
+	o.ignore[colltab.Secondary] = true
+}
+
+func ignoreCaseF(o *options) {
+	o.ignore[colltab.Tertiary] = true
+	o.caseLevel = false
+}
+
+func looseF(o *options) {
+	ignoreWidthF(o)
+	ignoreDiacriticsF(o)
+	ignoreCaseF(o)
+}
+
+func forceF(o *options) {
+	o.ignore[colltab.Identity] = false
+}
+
+func numericF(o *options) { o.numeric = true }
+
+// Reorder overrides the pre-defined ordering of scripts and character sets.
+func Reorder(s ...string) Option {
+	// TODO: need fractional weights to implement this.
+	panic("TODO: implement")
+}
+
+// TODO: consider making these public again. These options cannot be fully
+// specified in BCP47, so an API interface seems warranted. Still a higher-level
+// interface would be nice (e.g. a POSIX option for enabling altShiftTrimmed)
+
+// alternateHandling identifies the various ways in which variables are handled.
+// A rune with a primary weight lower than the variable top is considered a
+// variable.
+// See http://www.unicode.org/reports/tr10/#Variable_Weighting for details.
+type alternateHandling int
+
+const (
+	// altNonIgnorable turns off special handling of variables.
+	altNonIgnorable alternateHandling = iota
+
+	// altBlanked sets variables and all subsequent primary ignorables to be
+	// ignorable at all levels. This is identical to removing all variables
+	// and subsequent primary ignorables from the input.
+	altBlanked
+
+	// altShifted sets variables to be ignorable for levels one through three and
+	// adds a fourth level based on the values of the ignored levels.
+	altShifted
+
+	// altShiftTrimmed is a slight variant of altShifted that is used to
+	// emulate POSIX.
+	altShiftTrimmed
+)
