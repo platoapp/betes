@@ -57,4 +57,49 @@ func MatchLang(t language.Tag, tags []language.Tag) int {
 		}
 	}
 
-	// Besides the base language, script and region, only the collat
+	// Besides the base language, script and region, only the collation type and
+	// the custom variant defined in the 'u' extension are used to distinguish a
+	// locale.
+	// Strip all variants and extensions and add back the custom variant.
+	tdef, _ := language.Raw.Compose(t.Raw())
+	tdef, _ = tdef.SetTypeForKey("va", t.TypeForKey("va"))
+
+	// First search for a specialized collation type, if present.
+	try := []language.Tag{tdef}
+	if co := t.TypeForKey("co"); co != "" {
+		tco, _ := tdef.SetTypeForKey("co", co)
+		try = []language.Tag{tco, tdef}
+	}
+
+	for _, tx := range try {
+		for ; tx != language.Und; tx = parent(tx) {
+			for i, t := range tags[start:] {
+				if b, _, _ := t.Raw(); b != base {
+					break
+				}
+				if tx == t {
+					return start + i
+				}
+			}
+		}
+	}
+	return 0
+}
+
+// parent computes the structural parent. This means inheritance may change
+// script. So, unlike the CLDR parent, parent(zh-Hant) == zh.
+func parent(t language.Tag) language.Tag {
+	if t.TypeForKey("va") != "" {
+		t, _ = t.SetTypeForKey("va", "")
+		return t
+	}
+	result := language.Und
+	if b, s, r := t.Raw(); (r != language.Region{}) {
+		result, _ = language.Raw.Compose(b, s, t.Extensions())
+	} else if (s != language.Script{}) {
+		result, _ = language.Raw.Compose(b, t.Extensions())
+	} else if (b != language.Base{}) {
+		result, _ = language.Raw.Compose(t.Extensions())
+	}
+	return result
+}
