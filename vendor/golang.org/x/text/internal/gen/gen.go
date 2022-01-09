@@ -233,4 +233,101 @@ func get(root, path string) io.ReadCloser {
 	if err != nil {
 		log.Fatalf("HTTP GET: %v", err)
 	}
-	if resp.StatusCod
+	if resp.StatusCode != 200 {
+		log.Fatalf("Bad GET status for %q: %q", url, resp.Status)
+	}
+	return resp.Body
+}
+
+// TODO: use Write*Version in all applicable packages.
+
+// WriteUnicodeVersion writes a constant for the Unicode version from which the
+// tables are generated.
+func WriteUnicodeVersion(w io.Writer) {
+	fmt.Fprintf(w, "// UnicodeVersion is the Unicode version from which the tables in this package are derived.\n")
+	fmt.Fprintf(w, "const UnicodeVersion = %q\n\n", UnicodeVersion())
+}
+
+// WriteCLDRVersion writes a constant for the CLDR version from which the
+// tables are generated.
+func WriteCLDRVersion(w io.Writer) {
+	fmt.Fprintf(w, "// CLDRVersion is the CLDR version from which the tables in this package are derived.\n")
+	fmt.Fprintf(w, "const CLDRVersion = %q\n\n", CLDRVersion())
+}
+
+// WriteGoFile prepends a standard file comment and package statement to the
+// given bytes, applies gofmt, and writes them to a file with the given name.
+// It will call log.Fatal if there are any errors.
+func WriteGoFile(filename, pkg string, b []byte) {
+	w, err := os.Create(filename)
+	if err != nil {
+		log.Fatalf("Could not create file %s: %v", filename, err)
+	}
+	defer w.Close()
+	if _, err = WriteGo(w, pkg, "", b); err != nil {
+		log.Fatalf("Error writing file %s: %v", filename, err)
+	}
+}
+
+func insertVersion(filename, version string) string {
+	suffix := ".go"
+	if strings.HasSuffix(filename, "_test.go") {
+		suffix = "_test.go"
+	}
+	return fmt.Sprint(filename[:len(filename)-len(suffix)], version, suffix)
+}
+
+// WriteVersionedGoFile prepends a standard file comment, adds build tags to
+// version the file for the current Unicode version, and package statement to
+// the given bytes, applies gofmt, and writes them to a file with the given
+// name. It will call log.Fatal if there are any errors.
+func WriteVersionedGoFile(filename, pkg string, b []byte) {
+	tags := buildTags()
+	if tags != "" {
+		filename = insertVersion(filename, UnicodeVersion())
+	}
+	w, err := os.Create(filename)
+	if err != nil {
+		log.Fatalf("Could not create file %s: %v", filename, err)
+	}
+	defer w.Close()
+	if _, err = WriteGo(w, pkg, tags, b); err != nil {
+		log.Fatalf("Error writing file %s: %v", filename, err)
+	}
+}
+
+// WriteGo prepends a standard file comment and package statement to the given
+// bytes, applies gofmt, and writes them to w.
+func WriteGo(w io.Writer, pkg, tags string, b []byte) (n int, err error) {
+	src := []byte(header)
+	if tags != "" {
+		src = append(src, fmt.Sprintf("// +build %s\n\n", tags)...)
+	}
+	src = append(src, fmt.Sprintf("package %s\n\n", pkg)...)
+	src = append(src, b...)
+	formatted, err := format.Source(src)
+	if err != nil {
+		// Print the generated code even in case of an error so that the
+		// returned error can be meaningfully interpreted.
+		n, _ = w.Write(src)
+		return n, err
+	}
+	return w.Write(formatted)
+}
+
+// Repackage rewrites a Go file from belonging to package main to belonging to
+// the given package.
+func Repackage(inFile, outFile, pkg string) {
+	src, err := ioutil.ReadFile(inFile)
+	if err != nil {
+		log.Fatalf("reading %s: %v", inFile, err)
+	}
+	const toDelete = "package main\n\n"
+	i := bytes.Index(src, []byte(toDelete))
+	if i < 0 {
+		log.Fatalf("Could not find %q in %s.", toDelete, inFile)
+	}
+	w := &bytes.Buffer{}
+	w.Write(src[i+len(toDelete):])
+	WriteGoFile(outFile, pkg, w.Bytes())
+}
