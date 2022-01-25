@@ -40,4 +40,14 @@ func CodeSize(s string) (int, error) {
 	cmd.Dir = tmpdir
 	cmd.Stderr = w
 	cmd.Stdout = w
-	if err :=
+	if err := cmd.Run(); err != nil {
+		return 0, fmt.Errorf("testtext: failed to execute command: %v\nmain.go:\n%vErrors:%s", err, s, w)
+	}
+
+	// Determine the size.
+	fi, err := os.Stat(filepath.Join(tmpdir, "main"))
+	if err != nil {
+		return 0, fmt.Errorf("testtext: failed to get file info: %v", err)
+	}
+	return int(fi.Size()), nil
+}
