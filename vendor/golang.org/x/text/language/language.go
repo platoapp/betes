@@ -45,4 +45,112 @@ type Tag struct {
 	// determines the offset of a possible variant.
 	script   scriptID
 	pVariant byte   // offset in str, includes preceding '-'
-	pExt     uint16 // offset of first exten
+	pExt     uint16 // offset of first extension, includes preceding '-'
+
+	// str is the string representation of the Tag. It will only be used if the
+	// tag has variants or extensions.
+	str string
+}
+
+// Make is a convenience wrapper for Parse that omits the error.
+// In case of an error, a sensible default is returned.
+func Make(s string) Tag {
+	return Default.Make(s)
+}
+
+// Make is a convenience wrapper for c.Parse that omits the error.
+// In case of an error, a sensible default is returned.
+func (c CanonType) Make(s string) Tag {
+	t, _ := c.Parse(s)
+	return t
+}
+
+// Raw returns the raw base language, script and region, without making an
+// attempt to infer their values.
+func (t Tag) Raw() (b Base, s Script, r Region) {
+	return Base{t.lang}, Script{t.script}, Region{t.region}
+}
+
+// equalTags compares language, script and region subtags only.
+func (t Tag) equalTags(a Tag) bool {
+	return t.lang == a.lang && t.script == a.script && t.region == a.region
+}
+
+// IsRoot returns true if t is equal to language "und".
+func (t Tag) IsRoot() bool {
+	if int(t.pVariant) < len(t.str) {
+		return false
+	}
+	return t.equalTags(und)
+}
+
+// private reports whether the Tag consists solely of a private use tag.
+func (t Tag) private() bool {
+	return t.str != "" && t.pVariant == 0
+}
+
+// CanonType can be used to enable or disable various types of canonicalization.
+type CanonType int
+
+const (
+	// Replace deprecated base languages with their preferred replacements.
+	DeprecatedBase CanonType = 1 << iota
+	// Replace deprecated scripts with their preferred replacements.
+	DeprecatedScript
+	// Replace deprecated regions with their preferred replacements.
+	DeprecatedRegion
+	// Remove redundant scripts.
+	SuppressScript
+	// Normalize legacy encodings. This includes legacy languages defined in
+	// CLDR as well as bibliographic codes defined in ISO-639.
+	Legacy
+	// Map the dominant language of a macro language group to the macro language
+	// subtag. For example cmn -> zh.
+	Macro
+	// The CLDR flag should be used if full compatibility with CLDR is required.
+	// There are a few cases where language.Tag may differ from CLDR. To follow all
+	// of CLDR's suggestions, use All|CLDR.
+	CLDR
+
+	// Raw can be used to Compose or Parse without Canonicalization.
+	Raw CanonType = 0
+
+	// Replace all deprecated tags with their preferred replacements.
+	Deprecated = DeprecatedBase | DeprecatedScript | DeprecatedRegion
+
+	// All canonicalizations recommended by BCP 47.
+	BCP47 = Deprecated | SuppressScript
+
+	// All canonicalizations.
+	All = BCP47 | Legacy | Macro
+
+	// Default is the canonicalization used by Parse, Make and Compose. To
+	// preserve as much information as possible, canonicalizations that remove
+	// potentially valuable information are not included. The Matcher is
+	// designed to recognize similar tags that would be the same if
+	// they were canonicalized using All.
+	Default = Deprecated | Legacy
+
+	canonLang = DeprecatedBase | Legacy | Macro
+
+	// TODO: LikelyScript, LikelyRegion: suppress similar to ICU.
+)
+
+// canonicalize returns the canonicalized equivalent of the tag and
+// whether there was any change.
+func (t Tag) canonicalize(c CanonType) (Tag, bool) {
+	if c == Raw {
+		return t, false
+	}
+	changed := false
+	if c&SuppressScript != 0 {
+		if t.lang < langNoIndexOffset && uint8(t.script) == suppressScript[t.lang] {
+			t.script = 0
+			changed = true
+		}
+	}
+	if c&canonLang != 0 {
+		for {
+			if l, aliasType := normLang(t.lang); l != t.lang {
+				switch aliasType {
+				case 
