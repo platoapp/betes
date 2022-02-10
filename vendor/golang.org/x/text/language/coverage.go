@@ -126,4 +126,72 @@ func (b bases) Less(i, j int) bool {
 
 // BaseLanguages returns the result from calling s.bases if it is specified or
 // otherwise derives the set of supported base languages from tags.
-func (s *coverage) BaseLanguages() []Bas
+func (s *coverage) BaseLanguages() []Base {
+	if s.bases == nil {
+		tags := s.Tags()
+		if len(tags) == 0 {
+			return nil
+		}
+		a := make([]Base, len(tags))
+		for i, t := range tags {
+			a[i] = Base{langID(t.lang)}
+		}
+		sort.Sort(bases(a))
+		k := 0
+		for i := 1; i < len(a); i++ {
+			if a[k] != a[i] {
+				k++
+				a[k] = a[i]
+			}
+		}
+		return a[:k+1]
+	}
+	return s.bases()
+}
+
+func (s *coverage) Scripts() []Script {
+	if s.scripts == nil {
+		return nil
+	}
+	return s.scripts()
+}
+
+func (s *coverage) Regions() []Region {
+	if s.regions == nil {
+		return nil
+	}
+	return s.regions()
+}
+
+// NewCoverage returns a Coverage for the given lists. It is typically used by
+// packages providing internationalization services to define their level of
+// coverage. A list may be of type []T or func() []T, where T is either Tag,
+// Base, Script or Region. The returned Coverage derives the value for Bases
+// from Tags if no func or slice for []Base is specified. For other unspecified
+// types the returned Coverage will return nil for the respective methods.
+func NewCoverage(list ...interface{}) Coverage {
+	s := &coverage{}
+	for _, x := range list {
+		switch v := x.(type) {
+		case func() []Base:
+			s.bases = v
+		case func() []Script:
+			s.scripts = v
+		case func() []Region:
+			s.regions = v
+		case func() []Tag:
+			s.tags = v
+		case []Base:
+			s.bases = func() []Base { return v }
+		case []Script:
+			s.scripts = func() []Script { return v }
+		case []Region:
+			s.regions = func() []Region { return v }
+		case []Tag:
+			s.tags = func() []Tag { return v }
+		default:
+			panic(fmt.Sprintf("language: unsupported set type %T", v))
+		}
+	}
+	return s
+}
