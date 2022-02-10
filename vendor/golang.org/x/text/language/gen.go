@@ -1710,3 +1710,4 @@ func main() {
 	b.writeMatchData()
 	b.writeRegionInclusionData()
 	b.writeParents()
+}
