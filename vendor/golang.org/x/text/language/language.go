@@ -273,4 +273,110 @@ func (t *Tag) remakeString() {
 
 // genCoreBytes writes a string for the base languages, script and region tags
 // to the given buffer and returns the number of bytes written. It will never
-// write more than maxCoreS
+// write more than maxCoreSize bytes.
+func (t *Tag) genCoreBytes(buf []byte) int {
+	n := t.lang.stringToBuf(buf[:])
+	if t.script != 0 {
+		n += copy(buf[n:], "-")
+		n += copy(buf[n:], t.script.String())
+	}
+	if t.region != 0 {
+		n += copy(buf[n:], "-")
+		n += copy(buf[n:], t.region.String())
+	}
+	return n
+}
+
+// String returns the canonical string representation of the language tag.
+func (t Tag) String() string {
+	if t.str != "" {
+		return t.str
+	}
+	if t.script == 0 && t.region == 0 {
+		return t.lang.String()
+	}
+	buf := [maxCoreSize]byte{}
+	return string(buf[:t.genCoreBytes(buf[:])])
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (t Tag) MarshalText() (text []byte, err error) {
+	if t.str != "" {
+		text = append(text, t.str...)
+	} else if t.script == 0 && t.region == 0 {
+		text = append(text, t.lang.String()...)
+	} else {
+		buf := [maxCoreSize]byte{}
+		text = buf[:t.genCoreBytes(buf[:])]
+	}
+	return text, nil
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (t *Tag) UnmarshalText(text []byte) error {
+	tag, err := Raw.Parse(string(text))
+	*t = tag
+	return err
+}
+
+// Base returns the base language of the language tag. If the base language is
+// unspecified, an attempt will be made to infer it from the context.
+// It uses a variant of CLDR's Add Likely Subtags algorithm. This is subject to change.
+func (t Tag) Base() (Base, Confidence) {
+	if t.lang != 0 {
+		return Base{t.lang}, Exact
+	}
+	c := High
+	if t.script == 0 && !(Region{t.region}).IsCountry() {
+		c = Low
+	}
+	if tag, err := addTags(t); err == nil && tag.lang != 0 {
+		return Base{tag.lang}, c
+	}
+	return Base{0}, No
+}
+
+// Script infers the script for the language tag. If it was not explicitly given, it will infer
+// a most likely candidate.
+// If more than one script is commonly used for a language, the most likely one
+// is returned with a low confidence indication. For example, it returns (Cyrl, Low)
+// for Serbian.
+// If a script cannot be inferred (Zzzz, No) is returned. We do not use Zyyy (undetermined)
+// as one would suspect from the IANA registry for BCP 47. In a Unicode context Zyyy marks
+// common characters (like 1, 2, 3, '.', etc.) and is therefore more like multiple scripts.
+// See http://www.unicode.org/reports/tr24/#Values for more details. Zzzz is also used for
+// unknown value in CLDR.  (Zzzz, Exact) is returned if Zzzz was explicitly specified.
+// Note that an inferred script is never guaranteed to be the correct one. Latin is
+// almost exclusively used for Afrikaans, but Arabic has been used for some texts
+// in the past.  Also, the script that is commonly used may change over time.
+// It uses a variant of CLDR's Add Likely Subtags algorithm. This is subject to change.
+func (t Tag) Script() (Script, Confidence) {
+	if t.script != 0 {
+		return Script{t.script}, Exact
+	}
+	sc, c := scriptID(_Zzzz), No
+	if t.lang < langNoIndexOffset {
+		if scr := scriptID(suppressScript[t.lang]); scr != 0 {
+			// Note: it is not always the case that a language with a suppress
+			// script value is only written in one script (e.g. kk, ms, pa).
+			if t.region == 0 {
+				return Script{scriptID(scr)}, High
+			}
+			sc, c = scr, High
+		}
+	}
+	if tag, err := addTags(t); err == nil {
+		if tag.script != sc {
+			sc, c = tag.script, Low
+		}
+	} else {
+		t, _ = (Deprecated | Macro).Canonicalize(t)
+		if tag, err := addTags(t); err == nil && tag.script != sc {
+			sc, c = tag.script, Low
+		}
+	}
+	return Script{sc}, c
+}
+
+// Region returns the region for the language tag. If it was not explicitly given, it will
+// infer 
