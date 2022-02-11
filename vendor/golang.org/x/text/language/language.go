@@ -153,4 +153,124 @@ func (t Tag) canonicalize(c CanonType) (Tag, bool) {
 		for {
 			if l, aliasType := normLang(t.lang); l != t.lang {
 				switch aliasType {
-				case 
+				case langLegacy:
+					if c&Legacy != 0 {
+						if t.lang == _sh && t.script == 0 {
+							t.script = _Latn
+						}
+						t.lang = l
+						changed = true
+					}
+				case langMacro:
+					if c&Macro != 0 {
+						// We deviate here from CLDR. The mapping "nb" -> "no"
+						// qualifies as a typical Macro language mapping.  However,
+						// for legacy reasons, CLDR maps "no", the macro language
+						// code for Norwegian, to the dominant variant "nb". This
+						// change is currently under consideration for CLDR as well.
+						// See http://unicode.org/cldr/trac/ticket/2698 and also
+						// http://unicode.org/cldr/trac/ticket/1790 for some of the
+						// practical implications. TODO: this check could be removed
+						// if CLDR adopts this change.
+						if c&CLDR == 0 || t.lang != _nb {
+							changed = true
+							t.lang = l
+						}
+					}
+				case langDeprecated:
+					if c&DeprecatedBase != 0 {
+						if t.lang == _mo && t.region == 0 {
+							t.region = _MD
+						}
+						t.lang = l
+						changed = true
+						// Other canonicalization types may still apply.
+						continue
+					}
+				}
+			} else if c&Legacy != 0 && t.lang == _no && c&CLDR != 0 {
+				t.lang = _nb
+				changed = true
+			}
+			break
+		}
+	}
+	if c&DeprecatedScript != 0 {
+		if t.script == _Qaai {
+			changed = true
+			t.script = _Zinh
+		}
+	}
+	if c&DeprecatedRegion != 0 {
+		if r := normRegion(t.region); r != 0 {
+			changed = true
+			t.region = r
+		}
+	}
+	return t, changed
+}
+
+// Canonicalize returns the canonicalized equivalent of the tag.
+func (c CanonType) Canonicalize(t Tag) (Tag, error) {
+	t, changed := t.canonicalize(c)
+	if changed {
+		t.remakeString()
+	}
+	return t, nil
+}
+
+// Confidence indicates the level of certainty for a given return value.
+// For example, Serbian may be written in Cyrillic or Latin script.
+// The confidence level indicates whether a value was explicitly specified,
+// whether it is typically the only possible value, or whether there is
+// an ambiguity.
+type Confidence int
+
+const (
+	No    Confidence = iota // full confidence that there was no match
+	Low                     // most likely value picked out of a set of alternatives
+	High                    // value is generally assumed to be the correct match
+	Exact                   // exact match or explicitly specified value
+)
+
+var confName = []string{"No", "Low", "High", "Exact"}
+
+func (c Confidence) String() string {
+	return confName[c]
+}
+
+// remakeString is used to update t.str in case lang, script or region changed.
+// It is assumed that pExt and pVariant still point to the start of the
+// respective parts.
+func (t *Tag) remakeString() {
+	if t.str == "" {
+		return
+	}
+	extra := t.str[t.pVariant:]
+	if t.pVariant > 0 {
+		extra = extra[1:]
+	}
+	if t.equalTags(und) && strings.HasPrefix(extra, "x-") {
+		t.str = extra
+		t.pVariant = 0
+		t.pExt = 0
+		return
+	}
+	var buf [max99thPercentileSize]byte // avoid extra memory allocation in most cases.
+	b := buf[:t.genCoreBytes(buf[:])]
+	if extra != "" {
+		diff := len(b) - int(t.pVariant)
+		b = append(b, '-')
+		b = append(b, extra...)
+		t.pVariant = uint8(int(t.pVariant) + diff)
+		t.pExt = uint16(int(t.pExt) + diff)
+	} else {
+		t.pVariant = uint8(len(b))
+		t.pExt = uint16(len(b))
+	}
+	t.str = string(b)
+}
+
+// genCoreBytes writes a string for the base languages, script and region tags
+// to the given buffer and returns the number of bytes written. It will never
+// write more than maxCoreS
