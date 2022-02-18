@@ -510,4 +510,131 @@ func (e Extension) Type() byte {
 }
 
 // Tokens returns the list of tokens of e.
-func (e 
+func (e Extension) Tokens() []string {
+	return strings.Split(e.s, "-")
+}
+
+// Extension returns the extension of type x for tag t. It will return
+// false for ok if t does not have the requested extension. The returned
+// extension will be invalid in this case.
+func (t Tag) Extension(x byte) (ext Extension, ok bool) {
+	for i := int(t.pExt); i < len(t.str)-1; {
+		var ext string
+		i, ext = getExtension(t.str, i)
+		if ext[0] == x {
+			return Extension{ext}, true
+		}
+	}
+	return Extension{}, false
+}
+
+// Extensions returns all extensions of t.
+func (t Tag) Extensions() []Extension {
+	e := []Extension{}
+	for i := int(t.pExt); i < len(t.str)-1; {
+		var ext string
+		i, ext = getExtension(t.str, i)
+		e = append(e, Extension{ext})
+	}
+	return e
+}
+
+// TypeForKey returns the type associated with the given key, where key and type
+// are of the allowed values defined for the Unicode locale extension ('u') in
+// http://www.unicode.org/reports/tr35/#Unicode_Language_and_Locale_Identifiers.
+// TypeForKey will traverse the inheritance chain to get the correct value.
+func (t Tag) TypeForKey(key string) string {
+	if start, end, _ := t.findTypeForKey(key); end != start {
+		return t.str[start:end]
+	}
+	return ""
+}
+
+var (
+	errPrivateUse       = errors.New("cannot set a key on a private use tag")
+	errInvalidArguments = errors.New("invalid key or type")
+)
+
+// SetTypeForKey returns a new Tag with the key set to type, where key and type
+// are of the allowed values defined for the Unicode locale extension ('u') in
+// http://www.unicode.org/reports/tr35/#Unicode_Language_and_Locale_Identifiers.
+// An empty value removes an existing pair with the same key.
+func (t Tag) SetTypeForKey(key, value string) (Tag, error) {
+	if t.private() {
+		return t, errPrivateUse
+	}
+	if len(key) != 2 {
+		return t, errInvalidArguments
+	}
+
+	// Remove the setting if value is "".
+	if value == "" {
+		start, end, _ := t.findTypeForKey(key)
+		if start != end {
+			// Remove key tag and leading '-'.
+			start -= 4
+
+			// Remove a possible empty extension.
+			if (end == len(t.str) || t.str[end+2] == '-') && t.str[start-2] == '-' {
+				start -= 2
+			}
+			if start == int(t.pVariant) && end == len(t.str) {
+				t.str = ""
+				t.pVariant, t.pExt = 0, 0
+			} else {
+				t.str = fmt.Sprintf("%s%s", t.str[:start], t.str[end:])
+			}
+		}
+		return t, nil
+	}
+
+	if len(value) < 3 || len(value) > 8 {
+		return t, errInvalidArguments
+	}
+
+	var (
+		buf    [maxCoreSize + maxSimpleUExtensionSize]byte
+		uStart int // start of the -u extension.
+	)
+
+	// Generate the tag string if needed.
+	if t.str == "" {
+		uStart = t.genCoreBytes(buf[:])
+		buf[uStart] = '-'
+		uStart++
+	}
+
+	// Create new key-type pair and parse it to verify.
+	b := buf[uStart:]
+	copy(b, "u-")
+	copy(b[2:], key)
+	b[4] = '-'
+	b = b[:5+copy(b[5:], value)]
+	scan := makeScanner(b)
+	if parseExtensions(&scan); scan.err != nil {
+		return t, scan.err
+	}
+
+	// Assemble the replacement string.
+	if t.str == "" {
+		t.pVariant, t.pExt = byte(uStart-1), uint16(uStart-1)
+		t.str = string(buf[:uStart+len(b)])
+	} else {
+		s := t.str
+		start, end, hasExt := t.findTypeForKey(key)
+		if start == end {
+			if hasExt {
+				b = b[2:]
+			}
+			t.str = fmt.Sprintf("%s-%s%s", s[:start], b, s[end:])
+		} else {
+			t.str = fmt.Sprintf("%s%s%s", s[:start], value, s[end:])
+		}
+	}
+	return t, nil
+}
+
+// findKeyAndType returns the start and end position for the type corresponding
+// to key or the point at which to insert the key-value pair if the type
+// wasn't found. The hasExt return value reports whether an -u extension was present.
+// Note: the extensions are typically very small and are likely to contain
