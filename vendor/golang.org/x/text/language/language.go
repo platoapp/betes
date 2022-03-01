@@ -638,3 +638,121 @@ func (t Tag) SetTypeForKey(key, value string) (Tag, error) {
 // to key or the point at which to insert the key-value pair if the type
 // wasn't found. The hasExt return value reports whether an -u extension was present.
 // Note: the extensions are typically very small and are likely to contain
+// only one key-type pair.
+func (t Tag) findTypeForKey(key string) (start, end int, hasExt bool) {
+	p := int(t.pExt)
+	if len(key) != 2 || p == len(t.str) || p == 0 {
+		return p, p, false
+	}
+	s := t.str
+
+	// Find the correct extension.
+	for p++; s[p] != 'u'; p++ {
+		if s[p] > 'u' {
+			p--
+			return p, p, false
+		}
+		if p = nextExtension(s, p); p == len(s) {
+			return len(s), len(s), false
+		}
+	}
+	// Proceed to the hyphen following the extension name.
+	p++
+
+	// curKey is the key currently being processed.
+	curKey := ""
+
+	// Iterate over keys until we get the end of a section.
+	for {
+		// p points to the hyphen preceding the current token.
+		if p3 := p + 3; s[p3] == '-' {
+			// Found a key.
+			// Check whether we just processed the key that was requested.
+			if curKey == key {
+				return start, p, true
+			}
+			// Set to the next key and continue scanning type tokens.
+			curKey = s[p+1 : p3]
+			if curKey > key {
+				return p, p, true
+			}
+			// Start of the type token sequence.
+			start = p + 4
+			// A type is at least 3 characters long.
+			p += 7 // 4 + 3
+		} else {
+			// Attribute or type, which is at least 3 characters long.
+			p += 4
+		}
+		// p points past the third character of a type or attribute.
+		max := p + 5 // maximum length of token plus hyphen.
+		if len(s) < max {
+			max = len(s)
+		}
+		for ; p < max && s[p] != '-'; p++ {
+		}
+		// Bail if we have exhausted all tokens or if the next token starts
+		// a new extension.
+		if p == len(s) || s[p+2] == '-' {
+			if curKey == key {
+				return start, p, true
+			}
+			return p, p, true
+		}
+	}
+}
+
+// CompactIndex returns an index, where 0 <= index < NumCompactTags, for tags
+// for which data exists in the text repository. The index will change over time
+// and should not be stored in persistent storage. Extensions, except for the
+// 'va' type of the 'u' extension, are ignored. It will return 0, false if no
+// compact tag exists, where 0 is the index for the root language (Und).
+func CompactIndex(t Tag) (index int, ok bool) {
+	// TODO: perhaps give more frequent tags a lower index.
+	// TODO: we could make the indexes stable. This will excluded some
+	//       possibilities for optimization, so don't do this quite yet.
+	b, s, r := t.Raw()
+	if len(t.str) > 0 {
+		if strings.HasPrefix(t.str, "x-") {
+			// We have no entries for user-defined tags.
+			return 0, false
+		}
+		if uint16(t.pVariant) != t.pExt {
+			// There are no tags with variants and an u-va type.
+			if t.TypeForKey("va") != "" {
+				return 0, false
+			}
+			t, _ = Raw.Compose(b, s, r, t.Variants())
+		} else if _, ok := t.Extension('u'); ok {
+			// Strip all but the 'va' entry.
+			variant := t.TypeForKey("va")
+			t, _ = Raw.Compose(b, s, r)
+			t, _ = t.SetTypeForKey("va", variant)
+		}
+		if len(t.str) > 0 {
+			// We have some variants.
+			for i, s := range specialTags {
+				if s == t {
+					return i + 1, true
+				}
+			}
+			return 0, false
+		}
+	}
+	// No variants specified: just compare core components.
+	// The key has the form lllssrrr, where l, s, and r are nibbles for
+	// respectively the langID, scriptID, and regionID.
+	key := uint32(b.langID) << (8 + 12)
+	key |= uint32(s.scriptID) << 12
+	key |= uint32(r.regionID)
+	x, ok := coreTags[key]
+	return int(x), ok
+}
+
+// Base is an ISO 639 language code, used for encoding the base language
+// of a language tag.
+type Base struct {
+	langID
+}
+
+// ParseBase parses a 2- or 3-letter ISO 639 cod
