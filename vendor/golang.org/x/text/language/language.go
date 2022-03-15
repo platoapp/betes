@@ -876,4 +876,32 @@ func (r Region) TLD() (Region, error) {
 	return r, nil
 }
 
-// Canonicalize returns the region or 
+// Canonicalize returns the region or a possible replacement if the region is
+// deprecated. It will not return a replacement for deprecated regions that
+// are split into multiple regions.
+func (r Region) Canonicalize() Region {
+	if cr := normRegion(r.regionID); cr != 0 {
+		return Region{cr}
+	}
+	return r
+}
+
+// Variant represents a registered variant of a language as defined by BCP 47.
+type Variant struct {
+	variant string
+}
+
+// ParseVariant parses and returns a Variant. An error is returned if s is not
+// a valid variant.
+func ParseVariant(s string) (Variant, error) {
+	s = strings.ToLower(s)
+	if _, ok := variantIndex[s]; ok {
+		return Variant{s}, nil
+	}
+	return Variant{}, mkErrInvalid([]byte(s))
+}
+
+// String returns the string representation of the variant.
+func (v Variant) String() string {
+	return v.variant
+}
