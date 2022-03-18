@@ -35,4 +35,23 @@ func visitDefaults(fn func(r rune, c Class)) {
 		0x0001EF00, 0x0001EFFF,
 	})
 	visitRunes(fn, ET, []rune{ // European Terminator
-		0x20A0, 0x20Cf, 
+		0x20A0, 0x20Cf, // Currency symbols
+	})
+	rangetable.Visit(unicode.Noncharacter_Code_Point, func(r rune) {
+		fn(r, BN) // Boundary Neutral
+	})
+	ucd.Parse(gen.OpenUCDFile("DerivedCoreProperties.txt"), func(p *ucd.Parser) {
+		if p.String(1) == "Default_Ignorable_Code_Point" {
+			fn(p.Rune(0), BN) // Boundary Neutral
+		}
+	})
+}
+
+func visitRunes(fn func(r rune, c Class), c Class, runes []rune) {
+	for i := 0; i < len(runes); i += 2 {
+		lo, hi := runes[i], runes[i+1]
+		for j := lo; j <= hi; j++ {
+			fn(j, c)
+		}
+	}
+}
