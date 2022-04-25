@@ -589,4 +589,14 @@ func (cldr *CLDR) finalize(filter []string) {
 			v := reflect.ValueOf(x).Elem()
 			t := v.Type()
 			for i := 0; i < v.NumField(); i++ {
-				f := t
+				f := t.Field(i)
+				name, _ := xmlName(f)
+				if name != "" && name != "identity" && !in(filter, name) {
+					v.Field(i).Set(reflect.Zero(f.Type))
+				}
+			}
+		}
+		linkEnclosing(nil, x) // for resolving aliases and paths
+		setNames(x, "ldml")
+	}
+}
