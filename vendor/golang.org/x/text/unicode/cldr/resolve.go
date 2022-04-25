@@ -331,4 +331,123 @@ func attrKey(v reflect.Value, exclude ...string) string {
 	return strings.Join(parts, ";")
 }
 
-// Key returns a key for e derived from
+// Key returns a key for e derived from all distinguishing attributes
+// except those specified by exclude.
+func Key(e Elem, exclude ...string) string {
+	return attrKey(reflect.ValueOf(e), exclude...)
+}
+
+// linkEnclosing sets the enclosing element as well as the name
+// for all sub-elements of child, recursively.
+func linkEnclosing(parent, child Elem) {
+	child.setEnclosing(parent)
+	v := reflect.ValueOf(child).Elem()
+	for i := iter(v); !i.done(); i.next() {
+		vf := i.value()
+		if vf.Kind() == reflect.Slice {
+			for j := 0; j < vf.Len(); j++ {
+				linkEnclosing(child, vf.Index(j).Interface().(Elem))
+			}
+		} else if vf.Kind() == reflect.Ptr && !vf.IsNil() && vf.Elem().Kind() == reflect.Struct {
+			linkEnclosing(child, vf.Interface().(Elem))
+		}
+	}
+}
+
+func setNames(e Elem, name string) {
+	e.setName(name)
+	v := reflect.ValueOf(e).Elem()
+	for i := iter(v); !i.done(); i.next() {
+		vf := i.value()
+		name, _ = xmlName(i.field())
+		if vf.Kind() == reflect.Slice {
+			for j := 0; j < vf.Len(); j++ {
+				setNames(vf.Index(j).Interface().(Elem), name)
+			}
+		} else if vf.Kind() == reflect.Ptr && !vf.IsNil() && vf.Elem().Kind() == reflect.Struct {
+			setNames(vf.Interface().(Elem), name)
+		}
+	}
+}
+
+// deepCopy copies elements of v recursively.  All elements of v that may
+// be modified by inheritance are explicitly copied.
+func deepCopy(v reflect.Value) reflect.Value {
+	switch v.Kind() {
+	case reflect.Ptr:
+		if v.IsNil() || v.Elem().Kind() != reflect.Struct {
+			return v
+		}
+		nv := reflect.New(v.Elem().Type())
+		nv.Elem().Set(v.Elem())
+		deepCopyRec(nv.Elem(), v.Elem())
+		return nv
+	case reflect.Slice:
+		nv := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		for i := 0; i < v.Len(); i++ {
+			deepCopyRec(nv.Index(i), v.Index(i))
+		}
+		return nv
+	}
+	panic("deepCopy: must be called with pointer or slice")
+}
+
+// deepCopyRec is only called by deepCopy.
+func deepCopyRec(nv, v reflect.Value) {
+	if v.Kind() == reflect.Struct {
+		t := v.Type()
+		for i := 0; i < v.NumField(); i++ {
+			if name, attr := xmlName(t.Field(i)); name != "" && !attr {
+				deepCopyRec(nv.Field(i), v.Field(i))
+			}
+		}
+	} else {
+		nv.Set(deepCopy(v))
+	}
+}
+
+// newNode is used to insert a missing node during inheritance.
+func (cldr *CLDR) newNode(v, enc reflect.Value) reflect.Value {
+	n := reflect.New(v.Type())
+	for i := iter(v); !i.done(); i.next() {
+		if name, attr := xmlName(i.field()); name == "" || attr {
+			n.Elem().FieldByIndex(i.index).Set(i.value())
+		}
+	}
+	n.Interface().(Elem).GetCommon().setEnclosing(enc.Addr().Interface().(Elem))
+	return n
+}
+
+// v, parent must be pointers to struct
+func (cldr *CLDR) inheritFields(v, parent reflect.Value) (res reflect.Value, err error) {
+	t := v.Type()
+	nv := reflect.New(t)
+	nv.Elem().Set(v)
+	for i := iter(v); !i.done(); i.next() {
+		vf := i.value()
+		f := i.field()
+		name, attr := xmlName(f)
+		if name == "" || attr {
+			continue
+		}
+		pf := parent.FieldByIndex(i.index)
+		if blocking[name] {
+			if vf.IsNil() {
+				vf = pf
+			}
+			nv.Elem().FieldByIndex(i.index).Set(deepCopy(vf))
+			continue
+		}
+		switch f.Type.Kind() {
+		case reflect.Ptr:
+			if f.Type.Elem().Kind() == reflect.Struct {
+				if !vf.IsNil() {
+					if vf, err = cldr.inheritStructPtr(vf, pf); err != nil {
+						return reflect.Value{}, err
+					}
+					vf.Interface().(Elem).setEnclosing(nv.Interface().(Elem))
+					nv.Elem().FieldByIndex(i.index).Set(vf)
+				} else if !pf.IsNil() {
+					n := cldr.newNode(pf.Elem(), v)
+					if vf, err = cldr.inheritStructPtr(n, pf); err != nil {
+						return reflect.Value{}, err
