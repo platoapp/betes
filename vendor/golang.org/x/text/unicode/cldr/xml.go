@@ -103,3 +103,121 @@ type SupplementalData struct {
 	SubdivisionContainment *struct {
 		Common
 		Subgroup []*struct {
+			Common
+			Subtype  string `xml:"subtype,attr"`
+			Contains string `xml:"contains,attr"`
+		} `xml:"subgroup"`
+	} `xml:"subdivisionContainment"`
+	LanguageData *struct {
+		Common
+		Language []*struct {
+			Common
+			Scripts     string `xml:"scripts,attr"`
+			Territories string `xml:"territories,attr"`
+			Variants    string `xml:"variants,attr"`
+		} `xml:"language"`
+	} `xml:"languageData"`
+	TerritoryInfo *struct {
+		Common
+		Territory []*struct {
+			Common
+			Gdp                string `xml:"gdp,attr"`
+			LiteracyPercent    string `xml:"literacyPercent,attr"`
+			Population         string `xml:"population,attr"`
+			LanguagePopulation []*struct {
+				Common
+				LiteracyPercent   string `xml:"literacyPercent,attr"`
+				WritingPercent    string `xml:"writingPercent,attr"`
+				PopulationPercent string `xml:"populationPercent,attr"`
+				OfficialStatus    string `xml:"officialStatus,attr"`
+			} `xml:"languagePopulation"`
+		} `xml:"territory"`
+	} `xml:"territoryInfo"`
+	PostalCodeData *struct {
+		Common
+		PostCodeRegex []*struct {
+			Common
+			TerritoryId string `xml:"territoryId,attr"`
+		} `xml:"postCodeRegex"`
+	} `xml:"postalCodeData"`
+	CalendarData *struct {
+		Common
+		Calendar []*struct {
+			Common
+			Territories    string  `xml:"territories,attr"`
+			CalendarSystem *Common `xml:"calendarSystem"`
+			Eras           *struct {
+				Common
+				Era []*struct {
+					Common
+					Start string `xml:"start,attr"`
+					End   string `xml:"end,attr"`
+				} `xml:"era"`
+			} `xml:"eras"`
+		} `xml:"calendar"`
+	} `xml:"calendarData"`
+	CalendarPreferenceData *struct {
+		Common
+		CalendarPreference []*struct {
+			Common
+			Territories string `xml:"territories,attr"`
+			Ordering    string `xml:"ordering,attr"`
+		} `xml:"calendarPreference"`
+	} `xml:"calendarPreferenceData"`
+	WeekData *struct {
+		Common
+		MinDays []*struct {
+			Common
+			Count       string `xml:"count,attr"`
+			Territories string `xml:"territories,attr"`
+		} `xml:"minDays"`
+		FirstDay []*struct {
+			Common
+			Day         string `xml:"day,attr"`
+			Territories string `xml:"territories,attr"`
+		} `xml:"firstDay"`
+		WeekendStart []*struct {
+			Common
+			Day         string `xml:"day,attr"`
+			Territories string `xml:"territories,attr"`
+		} `xml:"weekendStart"`
+		WeekendEnd []*struct {
+			Common
+			Day         string `xml:"day,attr"`
+			Territories string `xml:"territories,attr"`
+		} `xml:"weekendEnd"`
+		WeekOfPreference []*struct {
+			Common
+			Locales  string `xml:"locales,attr"`
+			Ordering string `xml:"ordering,attr"`
+		} `xml:"weekOfPreference"`
+	} `xml:"weekData"`
+	TimeData *struct {
+		Common
+		Hours []*struct {
+			Common
+			Allowed   string `xml:"allowed,attr"`
+			Preferred string `xml:"preferred,attr"`
+			Regions   string `xml:"regions,attr"`
+		} `xml:"hours"`
+	} `xml:"timeData"`
+	MeasurementData *struct {
+		Common
+		MeasurementSystem []*struct {
+			Common
+			Category    string `xml:"category,attr"`
+			Territories string `xml:"territories,attr"`
+		} `xml:"measurementSystem"`
+		PaperSize []*struct {
+			Common
+			Territories string `xml:"territories,attr"`
+		} `xml:"paperSize"`
+	} `xml:"measurementData"`
+	UnitPreferenceData *struct {
+		Common
+		UnitPreferences []*struct {
+			Common
+			Category       string `xml:"category,attr"`
+			Usage          string `xml:"usage,attr"`
+			Scope          string `xml:"scope,attr"`
+			UnitPreferen
