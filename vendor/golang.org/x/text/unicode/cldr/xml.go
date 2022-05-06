@@ -220,4 +220,117 @@ type SupplementalData struct {
 			Category       string `xml:"category,attr"`
 			Usage          string `xml:"usage,attr"`
 			Scope          string `xml:"scope,attr"`
-			UnitPreferen
+			UnitPreference []*struct {
+				Common
+				Regions string `xml:"regions,attr"`
+			} `xml:"unitPreference"`
+		} `xml:"unitPreferences"`
+	} `xml:"unitPreferenceData"`
+	TimezoneData *struct {
+		Common
+		MapTimezones []*struct {
+			Common
+			OtherVersion string `xml:"otherVersion,attr"`
+			TypeVersion  string `xml:"typeVersion,attr"`
+			MapZone      []*struct {
+				Common
+				Other     string `xml:"other,attr"`
+				Territory string `xml:"territory,attr"`
+			} `xml:"mapZone"`
+		} `xml:"mapTimezones"`
+		ZoneFormatting []*struct {
+			Common
+			Multizone   string `xml:"multizone,attr"`
+			TzidVersion string `xml:"tzidVersion,attr"`
+			ZoneItem    []*struct {
+				Common
+				Territory string `xml:"territory,attr"`
+				Aliases   string `xml:"aliases,attr"`
+			} `xml:"zoneItem"`
+		} `xml:"zoneFormatting"`
+	} `xml:"timezoneData"`
+	Characters *struct {
+		Common
+		CharacterFallback []*struct {
+			Common
+			Character []*struct {
+				Common
+				Value      string    `xml:"value,attr"`
+				Substitute []*Common `xml:"substitute"`
+			} `xml:"character"`
+		} `xml:"character-fallback"`
+	} `xml:"characters"`
+	Transforms *struct {
+		Common
+		Transform []*struct {
+			Common
+			Source        string    `xml:"source,attr"`
+			Target        string    `xml:"target,attr"`
+			Variant       string    `xml:"variant,attr"`
+			Direction     string    `xml:"direction,attr"`
+			Alias         string    `xml:"alias,attr"`
+			BackwardAlias string    `xml:"backwardAlias,attr"`
+			Visibility    string    `xml:"visibility,attr"`
+			Comment       []*Common `xml:"comment"`
+			TRule         []*Common `xml:"tRule"`
+		} `xml:"transform"`
+	} `xml:"transforms"`
+	Metadata *struct {
+		Common
+		AttributeOrder *Common `xml:"attributeOrder"`
+		ElementOrder   *Common `xml:"elementOrder"`
+		SerialElements *Common `xml:"serialElements"`
+		Suppress       *struct {
+			Common
+			Attributes []*struct {
+				Common
+				Element        string `xml:"element,attr"`
+				Attribute      string `xml:"attribute,attr"`
+				AttributeValue string `xml:"attributeValue,attr"`
+			} `xml:"attributes"`
+		} `xml:"suppress"`
+		Validity *struct {
+			Common
+			Variable []*struct {
+				Common
+				Id string `xml:"id,attr"`
+			} `xml:"variable"`
+			AttributeValues []*struct {
+				Common
+				Dtds       string `xml:"dtds,attr"`
+				Elements   string `xml:"elements,attr"`
+				Attributes string `xml:"attributes,attr"`
+				Order      string `xml:"order,attr"`
+			} `xml:"attributeValues"`
+		} `xml:"validity"`
+		Alias *struct {
+			Common
+			LanguageAlias []*struct {
+				Common
+				Replacement string `xml:"replacement,attr"`
+				Reason      string `xml:"reason,attr"`
+			} `xml:"languageAlias"`
+			ScriptAlias []*struct {
+				Common
+				Replacement string `xml:"replacement,attr"`
+				Reason      string `xml:"reason,attr"`
+			} `xml:"scriptAlias"`
+			TerritoryAlias []*struct {
+				Common
+				Replacement string `xml:"replacement,attr"`
+				Reason      string `xml:"reason,attr"`
+			} `xml:"territoryAlias"`
+			SubdivisionAlias []*struct {
+				Common
+				Replacement string `xml:"replacement,attr"`
+				Reason      string `xml:"reason,attr"`
+			} `xml:"subdivisionAlias"`
+			VariantAlias []*struct {
+				Common
+				Replacement string `xml:"replacement,attr"`
+				Reason      string `xml:"reason,attr"`
+			} `xml:"variantAlias"`
+			ZoneAlias []*struct {
+				Common
+				Replacement string `xml:"replacement,attr"`
+				Reason      string `xml:"reason,a
