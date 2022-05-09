@@ -333,4 +333,139 @@ type SupplementalData struct {
 			ZoneAlias []*struct {
 				Common
 				Replacement string `xml:"replacement,attr"`
-				Reason      string `xml:"reason,a
+				Reason      string `xml:"reason,attr"`
+			} `xml:"zoneAlias"`
+		} `xml:"alias"`
+		Deprecated *struct {
+			Common
+			DeprecatedItems []*struct {
+				Common
+				Elements   string `xml:"elements,attr"`
+				Attributes string `xml:"attributes,attr"`
+				Values     string `xml:"values,attr"`
+			} `xml:"deprecatedItems"`
+		} `xml:"deprecated"`
+		Distinguishing *struct {
+			Common
+			DistinguishingItems []*struct {
+				Common
+				Exclude    string `xml:"exclude,attr"`
+				Elements   string `xml:"elements,attr"`
+				Attributes string `xml:"attributes,attr"`
+			} `xml:"distinguishingItems"`
+		} `xml:"distinguishing"`
+		Blocking *struct {
+			Common
+			BlockingItems []*struct {
+				Common
+				Elements string `xml:"elements,attr"`
+			} `xml:"blockingItems"`
+		} `xml:"blocking"`
+		CoverageAdditions *struct {
+			Common
+			LanguageCoverage []*struct {
+				Common
+				Values string `xml:"values,attr"`
+			} `xml:"languageCoverage"`
+			ScriptCoverage []*struct {
+				Common
+				Values string `xml:"values,attr"`
+			} `xml:"scriptCoverage"`
+			TerritoryCoverage []*struct {
+				Common
+				Values string `xml:"values,attr"`
+			} `xml:"territoryCoverage"`
+			CurrencyCoverage []*struct {
+				Common
+				Values string `xml:"values,attr"`
+			} `xml:"currencyCoverage"`
+			TimezoneCoverage []*struct {
+				Common
+				Values string `xml:"values,attr"`
+			} `xml:"timezoneCoverage"`
+		} `xml:"coverageAdditions"`
+		SkipDefaultLocale *struct {
+			Common
+			Services string `xml:"services,attr"`
+		} `xml:"skipDefaultLocale"`
+		DefaultContent *struct {
+			Common
+			Locales string `xml:"locales,attr"`
+		} `xml:"defaultContent"`
+	} `xml:"metadata"`
+	CodeMappings *struct {
+		Common
+		LanguageCodes []*struct {
+			Common
+			Alpha3 string `xml:"alpha3,attr"`
+		} `xml:"languageCodes"`
+		TerritoryCodes []*struct {
+			Common
+			Numeric  string `xml:"numeric,attr"`
+			Alpha3   string `xml:"alpha3,attr"`
+			Fips10   string `xml:"fips10,attr"`
+			Internet string `xml:"internet,attr"`
+		} `xml:"territoryCodes"`
+		CurrencyCodes []*struct {
+			Common
+			Numeric string `xml:"numeric,attr"`
+		} `xml:"currencyCodes"`
+	} `xml:"codeMappings"`
+	ParentLocales *struct {
+		Common
+		ParentLocale []*struct {
+			Common
+			Parent  string `xml:"parent,attr"`
+			Locales string `xml:"locales,attr"`
+		} `xml:"parentLocale"`
+	} `xml:"parentLocales"`
+	LikelySubtags *struct {
+		Common
+		LikelySubtag []*struct {
+			Common
+			From string `xml:"from,attr"`
+			To   string `xml:"to,attr"`
+		} `xml:"likelySubtag"`
+	} `xml:"likelySubtags"`
+	MetazoneInfo *struct {
+		Common
+		Timezone []*struct {
+			Common
+			UsesMetazone []*struct {
+				Common
+				From  string `xml:"from,attr"`
+				To    string `xml:"to,attr"`
+				Mzone string `xml:"mzone,attr"`
+			} `xml:"usesMetazone"`
+		} `xml:"timezone"`
+	} `xml:"metazoneInfo"`
+	Plurals []*struct {
+		Common
+		PluralRules []*struct {
+			Common
+			Locales    string `xml:"locales,attr"`
+			PluralRule []*struct {
+				Common
+				Count string `xml:"count,attr"`
+			} `xml:"pluralRule"`
+		} `xml:"pluralRules"`
+		PluralRanges []*struct {
+			Common
+			Locales     string `xml:"locales,attr"`
+			PluralRange []*struct {
+				Common
+				Start  string `xml:"start,attr"`
+				End    string `xml:"end,attr"`
+				Result string `xml:"result,attr"`
+			} `xml:"pluralRange"`
+		} `xml:"pluralRanges"`
+	} `xml:"plurals"`
+	TelephoneCodeData *struct {
+		Common
+		CodesByTerritory []*struct {
+			Common
+			Territory            string `xml:"territory,attr"`
+			TelephoneCountryCode []*struct {
+				Common
+				Code string `xml:"code,attr"`
+				From string `xml:"from,attr"`
