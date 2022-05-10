@@ -603,4 +603,126 @@ type SupplementalData struct {
 			Common
 			ApprovalRequirement []*struct {
 				Common
-				Votes   string `xml:"votes
+				Votes   string `xml:"votes,attr"`
+				Locales string `xml:"locales,attr"`
+				Paths   string `xml:"paths,attr"`
+			} `xml:"approvalRequirement"`
+		} `xml:"approvalRequirements"`
+		CoverageVariable []*struct {
+			Common
+			Key   string `xml:"key,attr"`
+			Value string `xml:"value,attr"`
+		} `xml:"coverageVariable"`
+		CoverageLevel []*struct {
+			Common
+			InLanguage  string `xml:"inLanguage,attr"`
+			InScript    string `xml:"inScript,attr"`
+			InTerritory string `xml:"inTerritory,attr"`
+			Value       string `xml:"value,attr"`
+			Match       string `xml:"match,attr"`
+		} `xml:"coverageLevel"`
+	} `xml:"coverageLevels"`
+	IdValidity *struct {
+		Common
+		Id []*struct {
+			Common
+			IdStatus string `xml:"idStatus,attr"`
+		} `xml:"id"`
+	} `xml:"idValidity"`
+	RgScope *struct {
+		Common
+		RgPath []*struct {
+			Common
+			Path string `xml:"path,attr"`
+		} `xml:"rgPath"`
+	} `xml:"rgScope"`
+	LanguageGroups *struct {
+		Common
+		LanguageGroup []*struct {
+			Common
+			Parent string `xml:"parent,attr"`
+		} `xml:"languageGroup"`
+	} `xml:"languageGroups"`
+}
+
+// LDML is the top-level type for locale-specific data.
+type LDML struct {
+	Common
+	Version  string `xml:"version,attr"`
+	Identity *struct {
+		Common
+		Version *struct {
+			Common
+			Number string `xml:"number,attr"`
+		} `xml:"version"`
+		Generation *struct {
+			Common
+			Date string `xml:"date,attr"`
+		} `xml:"generation"`
+		Language  *Common `xml:"language"`
+		Script    *Common `xml:"script"`
+		Territory *Common `xml:"territory"`
+		Variant   *Common `xml:"variant"`
+	} `xml:"identity"`
+	LocaleDisplayNames *LocaleDisplayNames `xml:"localeDisplayNames"`
+	Layout             *struct {
+		Common
+		Orientation []*struct {
+			Common
+			Characters     string    `xml:"characters,attr"`
+			Lines          string    `xml:"lines,attr"`
+			CharacterOrder []*Common `xml:"characterOrder"`
+			LineOrder      []*Common `xml:"lineOrder"`
+		} `xml:"orientation"`
+		InList []*struct {
+			Common
+			Casing string `xml:"casing,attr"`
+		} `xml:"inList"`
+		InText []*Common `xml:"inText"`
+	} `xml:"layout"`
+	ContextTransforms *struct {
+		Common
+		ContextTransformUsage []*struct {
+			Common
+			ContextTransform []*Common `xml:"contextTransform"`
+		} `xml:"contextTransformUsage"`
+	} `xml:"contextTransforms"`
+	Characters *struct {
+		Common
+		ExemplarCharacters []*Common `xml:"exemplarCharacters"`
+		Ellipsis           []*Common `xml:"ellipsis"`
+		MoreInformation    []*Common `xml:"moreInformation"`
+		Stopwords          []*struct {
+			Common
+			StopwordList []*Common `xml:"stopwordList"`
+		} `xml:"stopwords"`
+		IndexLabels []*struct {
+			Common
+			IndexSeparator           []*Common `xml:"indexSeparator"`
+			CompressedIndexSeparator []*Common `xml:"compressedIndexSeparator"`
+			IndexRangePattern        []*Common `xml:"indexRangePattern"`
+			IndexLabelBefore         []*Common `xml:"indexLabelBefore"`
+			IndexLabelAfter          []*Common `xml:"indexLabelAfter"`
+			IndexLabel               []*struct {
+				Common
+				IndexSource string `xml:"indexSource,attr"`
+				Priority    string `xml:"priority,attr"`
+			} `xml:"indexLabel"`
+		} `xml:"indexLabels"`
+		Mapping []*struct {
+			Common
+			Registry string `xml:"registry,attr"`
+		} `xml:"mapping"`
+		ParseLenients []*struct {
+			Common
+			Scope        string `xml:"scope,attr"`
+			Level        string `xml:"level,attr"`
+			ParseLenient []*struct {
+				Common
+				Sample string `xml:"sample,attr"`
+			} `xml:"parseLenient"`
+		} `xml:"parseLenients"`
+	} `xml:"characters"`
+	Delimiters *struct {
+		Common
+		QuotationStart 
