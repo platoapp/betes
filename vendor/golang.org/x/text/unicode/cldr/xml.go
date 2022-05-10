@@ -469,3 +469,138 @@ type SupplementalData struct {
 				Common
 				Code string `xml:"code,attr"`
 				From string `xml:"from,attr"`
+				To   string `xml:"to,attr"`
+			} `xml:"telephoneCountryCode"`
+		} `xml:"codesByTerritory"`
+	} `xml:"telephoneCodeData"`
+	NumberingSystems *struct {
+		Common
+		NumberingSystem []*struct {
+			Common
+			Id     string `xml:"id,attr"`
+			Radix  string `xml:"radix,attr"`
+			Digits string `xml:"digits,attr"`
+			Rules  string `xml:"rules,attr"`
+		} `xml:"numberingSystem"`
+	} `xml:"numberingSystems"`
+	Bcp47KeywordMappings *struct {
+		Common
+		MapKeys *struct {
+			Common
+			KeyMap []*struct {
+				Common
+				Bcp47 string `xml:"bcp47,attr"`
+			} `xml:"keyMap"`
+		} `xml:"mapKeys"`
+		MapTypes []*struct {
+			Common
+			TypeMap []*struct {
+				Common
+				Bcp47 string `xml:"bcp47,attr"`
+			} `xml:"typeMap"`
+		} `xml:"mapTypes"`
+	} `xml:"bcp47KeywordMappings"`
+	Gender *struct {
+		Common
+		PersonList []*struct {
+			Common
+			Locales string `xml:"locales,attr"`
+		} `xml:"personList"`
+	} `xml:"gender"`
+	References *struct {
+		Common
+		Reference []*struct {
+			Common
+			Uri string `xml:"uri,attr"`
+		} `xml:"reference"`
+	} `xml:"references"`
+	LanguageMatching *struct {
+		Common
+		LanguageMatches []*struct {
+			Common
+			ParadigmLocales []*struct {
+				Common
+				Locales string `xml:"locales,attr"`
+			} `xml:"paradigmLocales"`
+			MatchVariable []*struct {
+				Common
+				Id    string `xml:"id,attr"`
+				Value string `xml:"value,attr"`
+			} `xml:"matchVariable"`
+			LanguageMatch []*struct {
+				Common
+				Desired   string `xml:"desired,attr"`
+				Supported string `xml:"supported,attr"`
+				Percent   string `xml:"percent,attr"`
+				Distance  string `xml:"distance,attr"`
+				Oneway    string `xml:"oneway,attr"`
+			} `xml:"languageMatch"`
+		} `xml:"languageMatches"`
+	} `xml:"languageMatching"`
+	DayPeriodRuleSet []*struct {
+		Common
+		DayPeriodRules []*struct {
+			Common
+			Locales       string `xml:"locales,attr"`
+			DayPeriodRule []*struct {
+				Common
+				At     string `xml:"at,attr"`
+				After  string `xml:"after,attr"`
+				Before string `xml:"before,attr"`
+				From   string `xml:"from,attr"`
+				To     string `xml:"to,attr"`
+			} `xml:"dayPeriodRule"`
+		} `xml:"dayPeriodRules"`
+	} `xml:"dayPeriodRuleSet"`
+	MetaZones *struct {
+		Common
+		MetazoneInfo *struct {
+			Common
+			Timezone []*struct {
+				Common
+				UsesMetazone []*struct {
+					Common
+					From  string `xml:"from,attr"`
+					To    string `xml:"to,attr"`
+					Mzone string `xml:"mzone,attr"`
+				} `xml:"usesMetazone"`
+			} `xml:"timezone"`
+		} `xml:"metazoneInfo"`
+		MapTimezones *struct {
+			Common
+			OtherVersion string `xml:"otherVersion,attr"`
+			TypeVersion  string `xml:"typeVersion,attr"`
+			MapZone      []*struct {
+				Common
+				Other     string `xml:"other,attr"`
+				Territory string `xml:"territory,attr"`
+			} `xml:"mapZone"`
+		} `xml:"mapTimezones"`
+	} `xml:"metaZones"`
+	PrimaryZones *struct {
+		Common
+		PrimaryZone []*struct {
+			Common
+			Iso3166 string `xml:"iso3166,attr"`
+		} `xml:"primaryZone"`
+	} `xml:"primaryZones"`
+	WindowsZones *struct {
+		Common
+		MapTimezones *struct {
+			Common
+			OtherVersion string `xml:"otherVersion,attr"`
+			TypeVersion  string `xml:"typeVersion,attr"`
+			MapZone      []*struct {
+				Common
+				Other     string `xml:"other,attr"`
+				Territory string `xml:"territory,attr"`
+			} `xml:"mapZone"`
+		} `xml:"mapTimezones"`
+	} `xml:"windowsZones"`
+	CoverageLevels *struct {
+		Common
+		ApprovalRequirements *struct {
+			Common
+			ApprovalRequirement []*struct {
+				Common
+				Votes   string `xml:"votes
