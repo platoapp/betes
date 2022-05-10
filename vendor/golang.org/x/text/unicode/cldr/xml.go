@@ -725,4 +725,129 @@ type LDML struct {
 	} `xml:"characters"`
 	Delimiters *struct {
 		Common
-		QuotationStart 
+		QuotationStart          []*Common `xml:"quotationStart"`
+		QuotationEnd            []*Common `xml:"quotationEnd"`
+		AlternateQuotationStart []*Common `xml:"alternateQuotationStart"`
+		AlternateQuotationEnd   []*Common `xml:"alternateQuotationEnd"`
+	} `xml:"delimiters"`
+	Measurement *struct {
+		Common
+		MeasurementSystem []*Common `xml:"measurementSystem"`
+		PaperSize         []*struct {
+			Common
+			Height []*Common `xml:"height"`
+			Width  []*Common `xml:"width"`
+		} `xml:"paperSize"`
+	} `xml:"measurement"`
+	Dates *struct {
+		Common
+		LocalizedPatternChars []*Common `xml:"localizedPatternChars"`
+		DateRangePattern      []*Common `xml:"dateRangePattern"`
+		Calendars             *struct {
+			Common
+			Calendar []*Calendar `xml:"calendar"`
+		} `xml:"calendars"`
+		Fields *struct {
+			Common
+			Field []*struct {
+				Common
+				DisplayName []*struct {
+					Common
+					Count string `xml:"count,attr"`
+				} `xml:"displayName"`
+				Relative     []*Common `xml:"relative"`
+				RelativeTime []*struct {
+					Common
+					RelativeTimePattern []*struct {
+						Common
+						Count string `xml:"count,attr"`
+					} `xml:"relativeTimePattern"`
+				} `xml:"relativeTime"`
+				RelativePeriod []*Common `xml:"relativePeriod"`
+			} `xml:"field"`
+		} `xml:"fields"`
+		TimeZoneNames *TimeZoneNames `xml:"timeZoneNames"`
+	} `xml:"dates"`
+	Numbers *Numbers `xml:"numbers"`
+	Units   *struct {
+		Common
+		Unit []*struct {
+			Common
+			DisplayName []*struct {
+				Common
+				Count string `xml:"count,attr"`
+			} `xml:"displayName"`
+			UnitPattern []*struct {
+				Common
+				Count string `xml:"count,attr"`
+			} `xml:"unitPattern"`
+			PerUnitPattern []*Common `xml:"perUnitPattern"`
+		} `xml:"unit"`
+		UnitLength []*struct {
+			Common
+			CompoundUnit []*struct {
+				Common
+				CompoundUnitPattern []*Common `xml:"compoundUnitPattern"`
+			} `xml:"compoundUnit"`
+			Unit []*struct {
+				Common
+				DisplayName []*struct {
+					Common
+					Count string `xml:"count,attr"`
+				} `xml:"displayName"`
+				UnitPattern []*struct {
+					Common
+					Count string `xml:"count,attr"`
+				} `xml:"unitPattern"`
+				PerUnitPattern []*Common `xml:"perUnitPattern"`
+			} `xml:"unit"`
+			CoordinateUnit []*struct {
+				Common
+				CoordinateUnitPattern []*Common `xml:"coordinateUnitPattern"`
+			} `xml:"coordinateUnit"`
+		} `xml:"unitLength"`
+		DurationUnit []*struct {
+			Common
+			DurationUnitPattern []*Common `xml:"durationUnitPattern"`
+		} `xml:"durationUnit"`
+	} `xml:"units"`
+	ListPatterns *struct {
+		Common
+		ListPattern []*struct {
+			Common
+			ListPatternPart []*Common `xml:"listPatternPart"`
+		} `xml:"listPattern"`
+	} `xml:"listPatterns"`
+	Collations *struct {
+		Common
+		Version          string       `xml:"version,attr"`
+		DefaultCollation *Common      `xml:"defaultCollation"`
+		Collation        []*Collation `xml:"collation"`
+	} `xml:"collations"`
+	Posix *struct {
+		Common
+		Messages []*struct {
+			Common
+			Yesstr  []*Common `xml:"yesstr"`
+			Nostr   []*Common `xml:"nostr"`
+			Yesexpr []*Common `xml:"yesexpr"`
+			Noexpr  []*Common `xml:"noexpr"`
+		} `xml:"messages"`
+	} `xml:"posix"`
+	CharacterLabels *struct {
+		Common
+		CharacterLabelPattern []*struct {
+			Common
+			Count string `xml:"count,attr"`
+		} `xml:"characterLabelPattern"`
+		CharacterLabel []*Common `xml:"characterLabel"`
+	} `xml:"characterLabels"`
+	Segmentations *struct {
+		Common
+		Segmentation []*struct {
+			Common
+			Variables *struct {
+				Common
+				Variable []*struct {
+					Common
+					Id str
