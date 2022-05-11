@@ -850,4 +850,133 @@ type LDML struct {
 				Common
 				Variable []*struct {
 					Common
-					Id str
+					Id string `xml:"id,attr"`
+				} `xml:"variable"`
+			} `xml:"variables"`
+			SegmentRules *struct {
+				Common
+				Rule []*struct {
+					Common
+					Id string `xml:"id,attr"`
+				} `xml:"rule"`
+			} `xml:"segmentRules"`
+			Exceptions *struct {
+				Common
+				Exception []*Common `xml:"exception"`
+			} `xml:"exceptions"`
+			Suppressions *struct {
+				Common
+				Suppression []*Common `xml:"suppression"`
+			} `xml:"suppressions"`
+		} `xml:"segmentation"`
+	} `xml:"segmentations"`
+	Rbnf *struct {
+		Common
+		RulesetGrouping []*struct {
+			Common
+			Ruleset []*struct {
+				Common
+				Access        string `xml:"access,attr"`
+				AllowsParsing string `xml:"allowsParsing,attr"`
+				Rbnfrule      []*struct {
+					Common
+					Value  string `xml:"value,attr"`
+					Radix  string `xml:"radix,attr"`
+					Decexp string `xml:"decexp,attr"`
+				} `xml:"rbnfrule"`
+			} `xml:"ruleset"`
+		} `xml:"rulesetGrouping"`
+	} `xml:"rbnf"`
+	Annotations *struct {
+		Common
+		Annotation []*struct {
+			Common
+			Cp  string `xml:"cp,attr"`
+			Tts string `xml:"tts,attr"`
+		} `xml:"annotation"`
+	} `xml:"annotations"`
+	Metadata *struct {
+		Common
+		CasingData *struct {
+			Common
+			CasingItem []*struct {
+				Common
+				Override   string `xml:"override,attr"`
+				ForceError string `xml:"forceError,attr"`
+			} `xml:"casingItem"`
+		} `xml:"casingData"`
+	} `xml:"metadata"`
+	References *struct {
+		Common
+		Reference []*struct {
+			Common
+			Uri string `xml:"uri,attr"`
+		} `xml:"reference"`
+	} `xml:"references"`
+}
+
+// Collation contains rules that specify a certain sort-order,
+// as a tailoring of the root order.
+// The parsed rules are obtained by passing a RuleProcessor to Collation's
+// Process method.
+type Collation struct {
+	Common
+	Visibility string  `xml:"visibility,attr"`
+	Base       *Common `xml:"base"`
+	Import     []*struct {
+		Common
+		Source string `xml:"source,attr"`
+	} `xml:"import"`
+	Settings *struct {
+		Common
+		Strength           string `xml:"strength,attr"`
+		Alternate          string `xml:"alternate,attr"`
+		Backwards          string `xml:"backwards,attr"`
+		Normalization      string `xml:"normalization,attr"`
+		CaseLevel          string `xml:"caseLevel,attr"`
+		CaseFirst          string `xml:"caseFirst,attr"`
+		HiraganaQuaternary string `xml:"hiraganaQuaternary,attr"`
+		MaxVariable        string `xml:"maxVariable,attr"`
+		Numeric            string `xml:"numeric,attr"`
+		Private            string `xml:"private,attr"`
+		VariableTop        string `xml:"variableTop,attr"`
+		Reorder            string `xml:"reorder,attr"`
+	} `xml:"settings"`
+	SuppressContractions *Common   `xml:"suppress_contractions"`
+	Optimize             *Common   `xml:"optimize"`
+	Cr                   []*Common `xml:"cr"`
+	rulesElem
+}
+
+// Calendar specifies the fields used for formatting and parsing dates and times.
+// The month and quarter names are identified numerically, starting at 1.
+// The day (of the week) names are identified with short strings, since there is
+// no universally-accepted numeric designation.
+type Calendar struct {
+	Common
+	Months *struct {
+		Common
+		MonthContext []*struct {
+			Common
+			MonthWidth []*struct {
+				Common
+				Month []*struct {
+					Common
+					Yeartype string `xml:"yeartype,attr"`
+				} `xml:"month"`
+			} `xml:"monthWidth"`
+		} `xml:"monthContext"`
+	} `xml:"months"`
+	MonthNames *struct {
+		Common
+		Month []*struct {
+			Common
+			Yeartype string `xml:"yeartype,attr"`
+		} `xml:"month"`
+	} `xml:"monthNames"`
+	MonthAbbr *struct {
+		Common
+		Month []*struct {
+			Common
+			Yeartype string `xml:"yeartype,attr"`
+		} `xml:"mo
