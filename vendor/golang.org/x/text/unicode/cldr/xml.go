@@ -1133,4 +1133,128 @@ type Calendar struct {
 				} `xml:"displayName"`
 			} `xml:"dateTimeFormat"`
 		} `xml:"dateTimeFormatLength"`
-		AvailableFormats []*
+		AvailableFormats []*struct {
+			Common
+			DateFormatItem []*struct {
+				Common
+				Id    string `xml:"id,attr"`
+				Count string `xml:"count,attr"`
+			} `xml:"dateFormatItem"`
+		} `xml:"availableFormats"`
+		AppendItems []*struct {
+			Common
+			AppendItem []*struct {
+				Common
+				Request string `xml:"request,attr"`
+			} `xml:"appendItem"`
+		} `xml:"appendItems"`
+		IntervalFormats []*struct {
+			Common
+			IntervalFormatFallback []*Common `xml:"intervalFormatFallback"`
+			IntervalFormatItem     []*struct {
+				Common
+				Id                 string `xml:"id,attr"`
+				GreatestDifference []*struct {
+					Common
+					Id string `xml:"id,attr"`
+				} `xml:"greatestDifference"`
+			} `xml:"intervalFormatItem"`
+		} `xml:"intervalFormats"`
+	} `xml:"dateTimeFormats"`
+	Fields []*struct {
+		Common
+		Field []*struct {
+			Common
+			DisplayName []*struct {
+				Common
+				Count string `xml:"count,attr"`
+			} `xml:"displayName"`
+			Relative     []*Common `xml:"relative"`
+			RelativeTime []*struct {
+				Common
+				RelativeTimePattern []*struct {
+					Common
+					Count string `xml:"count,attr"`
+				} `xml:"relativeTimePattern"`
+			} `xml:"relativeTime"`
+			RelativePeriod []*Common `xml:"relativePeriod"`
+		} `xml:"field"`
+	} `xml:"fields"`
+}
+type TimeZoneNames struct {
+	Common
+	HourFormat           []*Common `xml:"hourFormat"`
+	HoursFormat          []*Common `xml:"hoursFormat"`
+	GmtFormat            []*Common `xml:"gmtFormat"`
+	GmtZeroFormat        []*Common `xml:"gmtZeroFormat"`
+	RegionFormat         []*Common `xml:"regionFormat"`
+	FallbackFormat       []*Common `xml:"fallbackFormat"`
+	FallbackRegionFormat []*Common `xml:"fallbackRegionFormat"`
+	AbbreviationFallback []*Common `xml:"abbreviationFallback"`
+	PreferenceOrdering   []*Common `xml:"preferenceOrdering"`
+	SingleCountries      []*struct {
+		Common
+		List string `xml:"list,attr"`
+	} `xml:"singleCountries"`
+	Zone []*struct {
+		Common
+		Long []*struct {
+			Common
+			Generic  []*Common `xml:"generic"`
+			Standard []*Common `xml:"standard"`
+			Daylight []*Common `xml:"daylight"`
+		} `xml:"long"`
+		Short []*struct {
+			Common
+			Generic  []*Common `xml:"generic"`
+			Standard []*Common `xml:"standard"`
+			Daylight []*Common `xml:"daylight"`
+		} `xml:"short"`
+		CommonlyUsed []*struct {
+			Common
+			Used string `xml:"used,attr"`
+		} `xml:"commonlyUsed"`
+		ExemplarCity []*Common `xml:"exemplarCity"`
+	} `xml:"zone"`
+	Metazone []*struct {
+		Common
+		Long []*struct {
+			Common
+			Generic  []*Common `xml:"generic"`
+			Standard []*Common `xml:"standard"`
+			Daylight []*Common `xml:"daylight"`
+		} `xml:"long"`
+		Short []*struct {
+			Common
+			Generic  []*Common `xml:"generic"`
+			Standard []*Common `xml:"standard"`
+			Daylight []*Common `xml:"daylight"`
+		} `xml:"short"`
+		CommonlyUsed []*struct {
+			Common
+			Used string `xml:"used,attr"`
+		} `xml:"commonlyUsed"`
+	} `xml:"metazone"`
+}
+
+// LocaleDisplayNames specifies localized display names for for scripts, languages,
+// countries, currencies, and variants.
+type LocaleDisplayNames struct {
+	Common
+	LocaleDisplayPattern *struct {
+		Common
+		LocalePattern        []*Common `xml:"localePattern"`
+		LocaleSeparator      []*Common `xml:"localeSeparator"`
+		LocaleKeyTypePattern []*Common `xml:"localeKeyTypePattern"`
+	} `xml:"localeDisplayPattern"`
+	Languages *struct {
+		Common
+		Language []*Common `xml:"language"`
+	} `xml:"languages"`
+	Scripts *struct {
+		Common
+		Script []*Common `xml:"script"`
+	} `xml:"scripts"`
+	Territories *struct {
+		Common
+		Territory []*Commo
