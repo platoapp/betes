@@ -979,4 +979,158 @@ type Calendar struct {
 		Month []*struct {
 			Common
 			Yeartype string `xml:"yeartype,attr"`
-		} `xml:"mo
+		} `xml:"month"`
+	} `xml:"monthAbbr"`
+	MonthPatterns *struct {
+		Common
+		MonthPatternContext []*struct {
+			Common
+			MonthPatternWidth []*struct {
+				Common
+				MonthPattern []*Common `xml:"monthPattern"`
+			} `xml:"monthPatternWidth"`
+		} `xml:"monthPatternContext"`
+	} `xml:"monthPatterns"`
+	Days *struct {
+		Common
+		DayContext []*struct {
+			Common
+			DayWidth []*struct {
+				Common
+				Day []*Common `xml:"day"`
+			} `xml:"dayWidth"`
+		} `xml:"dayContext"`
+	} `xml:"days"`
+	DayNames *struct {
+		Common
+		Day []*Common `xml:"day"`
+	} `xml:"dayNames"`
+	DayAbbr *struct {
+		Common
+		Day []*Common `xml:"day"`
+	} `xml:"dayAbbr"`
+	Quarters *struct {
+		Common
+		QuarterContext []*struct {
+			Common
+			QuarterWidth []*struct {
+				Common
+				Quarter []*Common `xml:"quarter"`
+			} `xml:"quarterWidth"`
+		} `xml:"quarterContext"`
+	} `xml:"quarters"`
+	Week *struct {
+		Common
+		MinDays []*struct {
+			Common
+			Count string `xml:"count,attr"`
+		} `xml:"minDays"`
+		FirstDay []*struct {
+			Common
+			Day string `xml:"day,attr"`
+		} `xml:"firstDay"`
+		WeekendStart []*struct {
+			Common
+			Day  string `xml:"day,attr"`
+			Time string `xml:"time,attr"`
+		} `xml:"weekendStart"`
+		WeekendEnd []*struct {
+			Common
+			Day  string `xml:"day,attr"`
+			Time string `xml:"time,attr"`
+		} `xml:"weekendEnd"`
+	} `xml:"week"`
+	Am         []*Common `xml:"am"`
+	Pm         []*Common `xml:"pm"`
+	DayPeriods *struct {
+		Common
+		DayPeriodContext []*struct {
+			Common
+			DayPeriodWidth []*struct {
+				Common
+				DayPeriod []*Common `xml:"dayPeriod"`
+			} `xml:"dayPeriodWidth"`
+		} `xml:"dayPeriodContext"`
+	} `xml:"dayPeriods"`
+	Eras *struct {
+		Common
+		EraNames *struct {
+			Common
+			Era []*Common `xml:"era"`
+		} `xml:"eraNames"`
+		EraAbbr *struct {
+			Common
+			Era []*Common `xml:"era"`
+		} `xml:"eraAbbr"`
+		EraNarrow *struct {
+			Common
+			Era []*Common `xml:"era"`
+		} `xml:"eraNarrow"`
+	} `xml:"eras"`
+	CyclicNameSets *struct {
+		Common
+		CyclicNameSet []*struct {
+			Common
+			CyclicNameContext []*struct {
+				Common
+				CyclicNameWidth []*struct {
+					Common
+					CyclicName []*Common `xml:"cyclicName"`
+				} `xml:"cyclicNameWidth"`
+			} `xml:"cyclicNameContext"`
+		} `xml:"cyclicNameSet"`
+	} `xml:"cyclicNameSets"`
+	DateFormats *struct {
+		Common
+		DateFormatLength []*struct {
+			Common
+			DateFormat []*struct {
+				Common
+				Pattern []*struct {
+					Common
+					Numbers string `xml:"numbers,attr"`
+					Count   string `xml:"count,attr"`
+				} `xml:"pattern"`
+				DisplayName []*struct {
+					Common
+					Count string `xml:"count,attr"`
+				} `xml:"displayName"`
+			} `xml:"dateFormat"`
+		} `xml:"dateFormatLength"`
+	} `xml:"dateFormats"`
+	TimeFormats *struct {
+		Common
+		TimeFormatLength []*struct {
+			Common
+			TimeFormat []*struct {
+				Common
+				Pattern []*struct {
+					Common
+					Numbers string `xml:"numbers,attr"`
+					Count   string `xml:"count,attr"`
+				} `xml:"pattern"`
+				DisplayName []*struct {
+					Common
+					Count string `xml:"count,attr"`
+				} `xml:"displayName"`
+			} `xml:"timeFormat"`
+		} `xml:"timeFormatLength"`
+	} `xml:"timeFormats"`
+	DateTimeFormats *struct {
+		Common
+		DateTimeFormatLength []*struct {
+			Common
+			DateTimeFormat []*struct {
+				Common
+				Pattern []*struct {
+					Common
+					Numbers string `xml:"numbers,attr"`
+					Count   string `xml:"count,attr"`
+				} `xml:"pattern"`
+				DisplayName []*struct {
+					Common
+					Count string `xml:"count,attr"`
+				} `xml:"displayName"`
+			} `xml:"dateTimeFormat"`
+		} `xml:"dateTimeFormatLength"`
+		AvailableFormats []*
