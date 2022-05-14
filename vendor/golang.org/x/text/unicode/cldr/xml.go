@@ -1257,4 +1257,130 @@ type LocaleDisplayNames struct {
 	} `xml:"scripts"`
 	Territories *struct {
 		Common
-		Territory []*Commo
+		Territory []*Common `xml:"territory"`
+	} `xml:"territories"`
+	Subdivisions *struct {
+		Common
+		Subdivision []*Common `xml:"subdivision"`
+	} `xml:"subdivisions"`
+	Variants *struct {
+		Common
+		Variant []*Common `xml:"variant"`
+	} `xml:"variants"`
+	Keys *struct {
+		Common
+		Key []*Common `xml:"key"`
+	} `xml:"keys"`
+	Types *struct {
+		Common
+		Type []*struct {
+			Common
+			Key string `xml:"key,attr"`
+		} `xml:"type"`
+	} `xml:"types"`
+	TransformNames *struct {
+		Common
+		TransformName []*Common `xml:"transformName"`
+	} `xml:"transformNames"`
+	MeasurementSystemNames *struct {
+		Common
+		MeasurementSystemName []*Common `xml:"measurementSystemName"`
+	} `xml:"measurementSystemNames"`
+	CodePatterns *struct {
+		Common
+		CodePattern []*Common `xml:"codePattern"`
+	} `xml:"codePatterns"`
+}
+
+// Numbers supplies information for formatting and parsing numbers and currencies.
+type Numbers struct {
+	Common
+	DefaultNumberingSystem []*Common `xml:"defaultNumberingSystem"`
+	OtherNumberingSystems  []*struct {
+		Common
+		Native      []*Common `xml:"native"`
+		Traditional []*Common `xml:"traditional"`
+		Finance     []*Common `xml:"finance"`
+	} `xml:"otherNumberingSystems"`
+	MinimumGroupingDigits []*Common `xml:"minimumGroupingDigits"`
+	Symbols               []*struct {
+		Common
+		NumberSystem string `xml:"numberSystem,attr"`
+		Decimal      []*struct {
+			Common
+			NumberSystem string `xml:"numberSystem,attr"`
+		} `xml:"decimal"`
+		Group []*struct {
+			Common
+			NumberSystem string `xml:"numberSystem,attr"`
+		} `xml:"group"`
+		List []*struct {
+			Common
+			NumberSystem string `xml:"numberSystem,attr"`
+		} `xml:"list"`
+		PercentSign []*struct {
+			Common
+			NumberSystem string `xml:"numberSystem,attr"`
+		} `xml:"percentSign"`
+		NativeZeroDigit []*struct {
+			Common
+			NumberSystem string `xml:"numberSystem,attr"`
+		} `xml:"nativeZeroDigit"`
+		PatternDigit []*struct {
+			Common
+			NumberSystem string `xml:"numberSystem,attr"`
+		} `xml:"patternDigit"`
+		PlusSign []*struct {
+			Common
+			NumberSystem string `xml:"numberSystem,attr"`
+		} `xml:"plusSign"`
+		MinusSign []*struct {
+			Common
+			NumberSystem string `xml:"numberSystem,attr"`
+		} `xml:"minusSign"`
+		Exponential []*struct {
+			Common
+			NumberSystem string `xml:"numberSystem,attr"`
+		} `xml:"exponential"`
+		SuperscriptingExponent []*Common `xml:"superscriptingExponent"`
+		PerMille               []*struct {
+			Common
+			NumberSystem string `xml:"numberSystem,attr"`
+		} `xml:"perMille"`
+		Infinity []*struct {
+			Common
+			NumberSystem string `xml:"numberSystem,attr"`
+		} `xml:"infinity"`
+		Nan []*struct {
+			Common
+			NumberSystem string `xml:"numberSystem,attr"`
+		} `xml:"nan"`
+		CurrencyDecimal []*struct {
+			Common
+			NumberSystem string `xml:"numberSystem,attr"`
+		} `xml:"currencyDecimal"`
+		CurrencyGroup []*struct {
+			Common
+			NumberSystem string `xml:"numberSystem,attr"`
+		} `xml:"currencyGroup"`
+		TimeSeparator []*Common `xml:"timeSeparator"`
+	} `xml:"symbols"`
+	DecimalFormats []*struct {
+		Common
+		NumberSystem        string `xml:"numberSystem,attr"`
+		DecimalFormatLength []*struct {
+			Common
+			DecimalFormat []*struct {
+				Common
+				Pattern []*struct {
+					Common
+					Numbers string `xml:"numbers,attr"`
+					Count   string `xml:"count,attr"`
+				} `xml:"pattern"`
+			} `xml:"decimalFormat"`
+		} `xml:"decimalFormatLength"`
+	} `xml:"decimalFormats"`
+	ScientificFormats []*struct {
+		Common
+		NumberSystem           string `xml:"numberSystem,attr"`
+		ScientificFormatLength []*struct {
