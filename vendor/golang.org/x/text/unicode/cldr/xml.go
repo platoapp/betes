@@ -1384,3 +1384,111 @@ type Numbers struct {
 		Common
 		NumberSystem           string `xml:"numberSystem,attr"`
 		ScientificFormatLength []*struct {
+			Common
+			ScientificFormat []*struct {
+				Common
+				Pattern []*struct {
+					Common
+					Numbers string `xml:"numbers,attr"`
+					Count   string `xml:"count,attr"`
+				} `xml:"pattern"`
+			} `xml:"scientificFormat"`
+		} `xml:"scientificFormatLength"`
+	} `xml:"scientificFormats"`
+	PercentFormats []*struct {
+		Common
+		NumberSystem        string `xml:"numberSystem,attr"`
+		PercentFormatLength []*struct {
+			Common
+			PercentFormat []*struct {
+				Common
+				Pattern []*struct {
+					Common
+					Numbers string `xml:"numbers,attr"`
+					Count   string `xml:"count,attr"`
+				} `xml:"pattern"`
+			} `xml:"percentFormat"`
+		} `xml:"percentFormatLength"`
+	} `xml:"percentFormats"`
+	CurrencyFormats []*struct {
+		Common
+		NumberSystem    string `xml:"numberSystem,attr"`
+		CurrencySpacing []*struct {
+			Common
+			BeforeCurrency []*struct {
+				Common
+				CurrencyMatch    []*Common `xml:"currencyMatch"`
+				SurroundingMatch []*Common `xml:"surroundingMatch"`
+				InsertBetween    []*Common `xml:"insertBetween"`
+			} `xml:"beforeCurrency"`
+			AfterCurrency []*struct {
+				Common
+				CurrencyMatch    []*Common `xml:"currencyMatch"`
+				SurroundingMatch []*Common `xml:"surroundingMatch"`
+				InsertBetween    []*Common `xml:"insertBetween"`
+			} `xml:"afterCurrency"`
+		} `xml:"currencySpacing"`
+		CurrencyFormatLength []*struct {
+			Common
+			CurrencyFormat []*struct {
+				Common
+				Pattern []*struct {
+					Common
+					Numbers string `xml:"numbers,attr"`
+					Count   string `xml:"count,attr"`
+				} `xml:"pattern"`
+			} `xml:"currencyFormat"`
+		} `xml:"currencyFormatLength"`
+		UnitPattern []*struct {
+			Common
+			Count string `xml:"count,attr"`
+		} `xml:"unitPattern"`
+	} `xml:"currencyFormats"`
+	Currencies *struct {
+		Common
+		Currency []*struct {
+			Common
+			Pattern []*struct {
+				Common
+				Numbers string `xml:"numbers,attr"`
+				Count   string `xml:"count,attr"`
+			} `xml:"pattern"`
+			DisplayName []*struct {
+				Common
+				Count string `xml:"count,attr"`
+			} `xml:"displayName"`
+			Symbol  []*Common `xml:"symbol"`
+			Decimal []*struct {
+				Common
+				NumberSystem string `xml:"numberSystem,attr"`
+			} `xml:"decimal"`
+			Group []*struct {
+				Common
+				NumberSystem string `xml:"numberSystem,attr"`
+			} `xml:"group"`
+		} `xml:"currency"`
+	} `xml:"currencies"`
+	MiscPatterns []*struct {
+		Common
+		NumberSystem string `xml:"numberSystem,attr"`
+		Pattern      []*struct {
+			Common
+			Numbers string `xml:"numbers,attr"`
+			Count   string `xml:"count,attr"`
+		} `xml:"pattern"`
+	} `xml:"miscPatterns"`
+	MinimalPairs []*struct {
+		Common
+		PluralMinimalPairs []*struct {
+			Common
+			Count string `xml:"count,attr"`
+		} `xml:"pluralMinimalPairs"`
+		OrdinalMinimalPairs []*struct {
+			Common
+			Ordinal string `xml:"ordinal,attr"`
+		} `xml:"ordinalMinimalPairs"`
+	} `xml:"minimalPairs"`
+}
+
+// Version is the version of CLDR from which the XML definitions are generated.
+const Version = "32"
