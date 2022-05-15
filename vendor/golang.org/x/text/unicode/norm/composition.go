@@ -127,4 +127,126 @@ func (rb *reorderBuffer) initString(f Form, src string) {
 
 func (rb *reorderBuffer) setFlusher(out []byte, f func(*reorderBuffer) bool) {
 	rb.out = out
-	rb.f
+	rb.flushF = f
+}
+
+// reset discards all characters from the buffer.
+func (rb *reorderBuffer) reset() {
+	rb.nrune = 0
+	rb.nbyte = 0
+}
+
+func (rb *reorderBuffer) doFlush() bool {
+	if rb.f.composing {
+		rb.compose()
+	}
+	res := rb.flushF(rb)
+	rb.reset()
+	return res
+}
+
+// appendFlush appends the normalized segment to rb.out.
+func appendFlush(rb *reorderBuffer) bool {
+	for i := 0; i < rb.nrune; i++ {
+		start := rb.rune[i].pos
+		end := start + rb.rune[i].size
+		rb.out = append(rb.out, rb.byte[start:end]...)
+	}
+	return true
+}
+
+// flush appends the normalized segment to out and resets rb.
+func (rb *reorderBuffer) flush(out []byte) []byte {
+	for i := 0; i < rb.nrune; i++ {
+		start := rb.rune[i].pos
+		end := start + rb.rune[i].size
+		out = append(out, rb.byte[start:end]...)
+	}
+	rb.reset()
+	return out
+}
+
+// flushCopy copies the normalized segment to buf and resets rb.
+// It returns the number of bytes written to buf.
+func (rb *reorderBuffer) flushCopy(buf []byte) int {
+	p := 0
+	for i := 0; i < rb.nrune; i++ {
+		runep := rb.rune[i]
+		p += copy(buf[p:], rb.byte[runep.pos:runep.pos+runep.size])
+	}
+	rb.reset()
+	return p
+}
+
+// insertOrdered inserts a rune in the buffer, ordered by Canonical Combining Class.
+// It returns false if the buffer is not large enough to hold the rune.
+// It is used internally by insert and insertString only.
+func (rb *reorderBuffer) insertOrdered(info Properties) {
+	n := rb.nrune
+	b := rb.rune[:]
+	cc := info.ccc
+	if cc > 0 {
+		// Find insertion position + move elements to make room.
+		for ; n > 0; n-- {
+			if b[n-1].ccc <= cc {
+				break
+			}
+			b[n] = b[n-1]
+		}
+	}
+	rb.nrune += 1
+	pos := uint8(rb.nbyte)
+	rb.nbyte += utf8.UTFMax
+	info.pos = pos
+	b[n] = info
+}
+
+// insertErr is an error code returned by insert. Using this type instead
+// of error improves performance up to 20% for many of the benchmarks.
+type insertErr int
+
+const (
+	iSuccess insertErr = -iota
+	iShortDst
+	iShortSrc
+)
+
+// insertFlush inserts the given rune in the buffer ordered by CCC.
+// If a decomposition with multiple segments are encountered, they leading
+// ones are flushed.
+// It returns a non-zero error code if the rune was not inserted.
+func (rb *reorderBuffer) insertFlush(src input, i int, info Properties) insertErr {
+	if rune := src.hangul(i); rune != 0 {
+		rb.decomposeHangul(rune)
+		return iSuccess
+	}
+	if info.hasDecomposition() {
+		return rb.insertDecomposed(info.Decomposition())
+	}
+	rb.insertSingle(src, i, info)
+	return iSuccess
+}
+
+// insertUnsafe inserts the given rune in the buffer ordered by CCC.
+// It is assumed there is sufficient space to hold the runes. It is the
+// responsibility of the caller to ensure this. This can be done by checking
+// the state returned by the streamSafe type.
+func (rb *reorderBuffer) insertUnsafe(src input, i int, info Properties) {
+	if rune := src.hangul(i); rune != 0 {
+		rb.decomposeHangul(rune)
+	}
+	if info.hasDecomposition() {
+		// TODO: inline.
+		rb.insertDecomposed(info.Decomposition())
+	} else {
+		rb.insertSingle(src, i, info)
+	}
+}
+
+// insertDecomposed inserts an entry in to the reorderBuffer for each rune
+// in dcomp. dcomp must be a sequence of decomposed UTF-8-encoded runes.
+// It flushes the buffer on each new segment start.
+func (rb *reorderBuffer) insertDecomposed(dcomp []byte) insertErr {
+	rb.tmpBytes.setBytes(dcomp)
+	// As the streamSafe accounting already handles the counting for modifiers,
+	// we don't ha
