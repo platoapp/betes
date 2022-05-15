@@ -249,4 +249,138 @@ func (rb *reorderBuffer) insertUnsafe(src input, i int, info Properties) {
 func (rb *reorderBuffer) insertDecomposed(dcomp []byte) insertErr {
 	rb.tmpBytes.setBytes(dcomp)
 	// As the streamSafe accounting already handles the counting for modifiers,
-	// we don't ha
+	// we don't have to call next. However, we do need to keep the accounting
+	// intact when flushing the buffer.
+	for i := 0; i < len(dcomp); {
+		info := rb.f.info(rb.tmpBytes, i)
+		if info.BoundaryBefore() && rb.nrune > 0 && !rb.doFlush() {
+			return iShortDst
+		}
+		i += copy(rb.byte[rb.nbyte:], dcomp[i:i+int(info.size)])
+		rb.insertOrdered(info)
+	}
+	return iSuccess
+}
+
+// insertSingle inserts an entry in the reorderBuffer for the rune at
+// position i. info is the runeInfo for the rune at position i.
+func (rb *reorderBuffer) insertSingle(src input, i int, info Properties) {
+	src.copySlice(rb.byte[rb.nbyte:], i, i+int(info.size))
+	rb.insertOrdered(info)
+}
+
+// insertCGJ inserts a Combining Grapheme Joiner (0x034f) into rb.
+func (rb *reorderBuffer) insertCGJ() {
+	rb.insertSingle(input{str: GraphemeJoiner}, 0, Properties{size: uint8(len(GraphemeJoiner))})
+}
+
+// appendRune inserts a rune at the end of the buffer. It is used for Hangul.
+func (rb *reorderBuffer) appendRune(r rune) {
+	bn := rb.nbyte
+	sz := utf8.EncodeRune(rb.byte[bn:], rune(r))
+	rb.nbyte += utf8.UTFMax
+	rb.rune[rb.nrune] = Properties{pos: bn, size: uint8(sz)}
+	rb.nrune++
+}
+
+// assignRune sets a rune at position pos. It is used for Hangul and recomposition.
+func (rb *reorderBuffer) assignRune(pos int, r rune) {
+	bn := rb.rune[pos].pos
+	sz := utf8.EncodeRune(rb.byte[bn:], rune(r))
+	rb.rune[pos] = Properties{pos: bn, size: uint8(sz)}
+}
+
+// runeAt returns the rune at position n. It is used for Hangul and recomposition.
+func (rb *reorderBuffer) runeAt(n int) rune {
+	inf := rb.rune[n]
+	r, _ := utf8.DecodeRune(rb.byte[inf.pos : inf.pos+inf.size])
+	return r
+}
+
+// bytesAt returns the UTF-8 encoding of the rune at position n.
+// It is used for Hangul and recomposition.
+func (rb *reorderBuffer) bytesAt(n int) []byte {
+	inf := rb.rune[n]
+	return rb.byte[inf.pos : int(inf.pos)+int(inf.size)]
+}
+
+// For Hangul we combine algorithmically, instead of using tables.
+const (
+	hangulBase  = 0xAC00 // UTF-8(hangulBase) -> EA B0 80
+	hangulBase0 = 0xEA
+	hangulBase1 = 0xB0
+	hangulBase2 = 0x80
+
+	hangulEnd  = hangulBase + jamoLVTCount // UTF-8(0xD7A4) -> ED 9E A4
+	hangulEnd0 = 0xED
+	hangulEnd1 = 0x9E
+	hangulEnd2 = 0xA4
+
+	jamoLBase  = 0x1100 // UTF-8(jamoLBase) -> E1 84 00
+	jamoLBase0 = 0xE1
+	jamoLBase1 = 0x84
+	jamoLEnd   = 0x1113
+	jamoVBase  = 0x1161
+	jamoVEnd   = 0x1176
+	jamoTBase  = 0x11A7
+	jamoTEnd   = 0x11C3
+
+	jamoTCount   = 28
+	jamoVCount   = 21
+	jamoVTCount  = 21 * 28
+	jamoLVTCount = 19 * 21 * 28
+)
+
+const hangulUTF8Size = 3
+
+func isHangul(b []byte) bool {
+	if len(b) < hangulUTF8Size {
+		return false
+	}
+	b0 := b[0]
+	if b0 < hangulBase0 {
+		return false
+	}
+	b1 := b[1]
+	switch {
+	case b0 == hangulBase0:
+		return b1 >= hangulBase1
+	case b0 < hangulEnd0:
+		return true
+	case b0 > hangulEnd0:
+		return false
+	case b1 < hangulEnd1:
+		return true
+	}
+	return b1 == hangulEnd1 && b[2] < hangulEnd2
+}
+
+func isHangulString(b string) bool {
+	if len(b) < hangulUTF8Size {
+		return false
+	}
+	b0 := b[0]
+	if b0 < hangulBase0 {
+		return false
+	}
+	b1 := b[1]
+	switch {
+	case b0 == hangulBase0:
+		return b1 >= hangulBase1
+	case b0 < hangulEnd0:
+		return true
+	case b0 > hangulEnd0:
+		return false
+	case b1 < hangulEnd1:
+		return true
+	}
+	return b1 == hangulEnd1 && b[2] < hangulEnd2
+}
+
+// Caller must ensure len(b) >= 2.
+func isJamoVT(b []byte) bool {
+	// True if (rune & 0xff00) == jamoLBase
+	return b[0] == jamoLBase0 && (b[1]&0xFC) == jamoLBase1
+}
+
+func i
