@@ -502,4 +502,7 @@ func (rb *reorderBuffer) compose() {
 			}
 		}
 		b[k] = b[i]
-		k
+		k++
+	}
+	rb.nrune = k
+}
