@@ -383,4 +383,123 @@ func isJamoVT(b []byte) bool {
 	return b[0] == jamoLBase0 && (b[1]&0xFC) == jamoLBase1
 }
 
-func i
+func isHangulWithoutJamoT(b []byte) bool {
+	c, _ := utf8.DecodeRune(b)
+	c -= hangulBase
+	return c < jamoLVTCount && c%jamoTCount == 0
+}
+
+// decomposeHangul writes the decomposed Hangul to buf and returns the number
+// of bytes written.  len(buf) should be at least 9.
+func decomposeHangul(buf []byte, r rune) int {
+	const JamoUTF8Len = 3
+	r -= hangulBase
+	x := r % jamoTCount
+	r /= jamoTCount
+	utf8.EncodeRune(buf, jamoLBase+r/jamoVCount)
+	utf8.EncodeRune(buf[JamoUTF8Len:], jamoVBase+r%jamoVCount)
+	if x != 0 {
+		utf8.EncodeRune(buf[2*JamoUTF8Len:], jamoTBase+x)
+		return 3 * JamoUTF8Len
+	}
+	return 2 * JamoUTF8Len
+}
+
+// decomposeHangul algorithmically decomposes a Hangul rune into
+// its Jamo components.
+// See http://unicode.org/reports/tr15/#Hangul for details on decomposing Hangul.
+func (rb *reorderBuffer) decomposeHangul(r rune) {
+	r -= hangulBase
+	x := r % jamoTCount
+	r /= jamoTCount
+	rb.appendRune(jamoLBase + r/jamoVCount)
+	rb.appendRune(jamoVBase + r%jamoVCount)
+	if x != 0 {
+		rb.appendRune(jamoTBase + x)
+	}
+}
+
+// combineHangul algorithmically combines Jamo character components into Hangul.
+// See http://unicode.org/reports/tr15/#Hangul for details on combining Hangul.
+func (rb *reorderBuffer) combineHangul(s, i, k int) {
+	b := rb.rune[:]
+	bn := rb.nrune
+	for ; i < bn; i++ {
+		cccB := b[k-1].ccc
+		cccC := b[i].ccc
+		if cccB == 0 {
+			s = k - 1
+		}
+		if s != k-1 && cccB >= cccC {
+			// b[i] is blocked by greater-equal cccX below it
+			b[k] = b[i]
+			k++
+		} else {
+			l := rb.runeAt(s) // also used to compare to hangulBase
+			v := rb.runeAt(i) // also used to compare to jamoT
+			switch {
+			case jamoLBase <= l && l < jamoLEnd &&
+				jamoVBase <= v && v < jamoVEnd:
+				// 11xx plus 116x to LV
+				rb.assignRune(s, hangulBase+
+					(l-jamoLBase)*jamoVTCount+(v-jamoVBase)*jamoTCount)
+			case hangulBase <= l && l < hangulEnd &&
+				jamoTBase < v && v < jamoTEnd &&
+				((l-hangulBase)%jamoTCount) == 0:
+				// ACxx plus 11Ax to LVT
+				rb.assignRune(s, l+v-jamoTBase)
+			default:
+				b[k] = b[i]
+				k++
+			}
+		}
+	}
+	rb.nrune = k
+}
+
+// compose recombines the runes in the buffer.
+// It should only be used to recompose a single segment, as it will not
+// handle alternations between Hangul and non-Hangul characters correctly.
+func (rb *reorderBuffer) compose() {
+	// UAX #15, section X5 , including Corrigendum #5
+	// "In any character sequence beginning with starter S, a character C is
+	//  blocked from S if and only if there is some character B between S
+	//  and C, and either B is a starter or it has the same or higher
+	//  combining class as C."
+	bn := rb.nrune
+	if bn == 0 {
+		return
+	}
+	k := 1
+	b := rb.rune[:]
+	for s, i := 0, 1; i < bn; i++ {
+		if isJamoVT(rb.bytesAt(i)) {
+			// Redo from start in Hangul mode. Necessary to support
+			// U+320E..U+321E in NFKC mode.
+			rb.combineHangul(s, i, k)
+			return
+		}
+		ii := b[i]
+		// We can only use combineForward as a filter if we later
+		// get the info for the combined character. This is more
+		// expensive than using the filter. Using combinesBackward()
+		// is safe.
+		if ii.combinesBackward() {
+			cccB := b[k-1].ccc
+			cccC := ii.ccc
+			blocked := false // b[i] blocked by starter or greater or equal CCC?
+			if cccB == 0 {
+				s = k - 1
+			} else {
+				blocked = s != k-1 && cccB >= cccC
+			}
+			if !blocked {
+				combined := combine(rb.runeAt(s), rb.runeAt(i))
+				if combined != 0 {
+					rb.assignRune(s, combined)
+					continue
+				}
+			}
+		}
+		b[k] = b[i]
+		k
