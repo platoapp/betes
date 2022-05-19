@@ -406,4 +406,52 @@ func nextComposed(i *Iter) []byte {
 	}
 	return i.returnSlice(startp, i.p)
 doNorm:
-	// res
+	// reset to start position
+	i.p = startp
+	i.info = i.rb.f.info(i.rb.src, i.p)
+	i.rb.ss.first(i.info)
+	if i.info.multiSegment() {
+		d := i.info.Decomposition()
+		info := i.rb.f.info(input{bytes: d}, 0)
+		i.rb.insertUnsafe(input{bytes: d}, 0, info)
+		i.multiSeg = d[int(info.size):]
+		i.next = nextMultiNorm
+		return nextMultiNorm(i)
+	}
+	i.rb.ss.first(i.info)
+	i.rb.insertUnsafe(i.rb.src, i.p, i.info)
+	return doNormComposed(i)
+}
+
+func doNormComposed(i *Iter) []byte {
+	// First rune should already be inserted.
+	for {
+		if i.p += int(i.info.size); i.p >= i.rb.nsrc {
+			i.setDone()
+			break
+		}
+		i.info = i.rb.f.info(i.rb.src, i.p)
+		if s := i.rb.ss.next(i.info); s == ssStarter {
+			break
+		} else if s == ssOverflow {
+			i.next = nextCGJCompose
+			break
+		}
+		i.rb.insertUnsafe(i.rb.src, i.p, i.info)
+	}
+	i.rb.compose()
+	seg := i.buf[:i.rb.flushCopy(i.buf[:])]
+	return seg
+}
+
+func nextCGJCompose(i *Iter) []byte {
+	i.rb.ss = 0 // instead of first
+	i.rb.insertCGJ()
+	i.next = nextComposed
+	// Note that we treat any rune with nLeadingNonStarters > 0 as a non-starter,
+	// even if they are not. This is particularly dubious for U+FF9E and UFF9A.
+	// If we ever change that, insert a check here.
+	i.rb.ss.first(i.info)
+	i.rb.insertUnsafe(i.rb.src, i.p, i.info)
+	return doNormComposed(i)
+}
