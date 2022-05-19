@@ -250,4 +250,160 @@ func nextDecomposed(i *Iter) (next []byte) {
 				if p > len(i.buf) {
 					return i.buf[:outp]
 				}
-			} else if i.info.m
+			} else if i.info.multiSegment() {
+				// outp must be 0 as multi-segment decompositions always
+				// start a new segment.
+				if i.multiSeg == nil {
+					i.multiSeg = d
+					i.next = nextMulti
+					return nextMulti(i)
+				}
+				// We are in the last segment.  Treat as normal decomposition.
+				d = i.multiSeg
+				i.multiSeg = nil
+				p = len(d)
+			}
+			prevCC := i.info.tccc
+			if i.p += sz; i.p >= i.rb.nsrc {
+				i.setDone()
+				i.info = Properties{} // Force BoundaryBefore to succeed.
+			} else {
+				i.info = i.rb.f.info(i.rb.src, i.p)
+			}
+			switch i.rb.ss.next(i.info) {
+			case ssOverflow:
+				i.next = nextCGJDecompose
+				fallthrough
+			case ssStarter:
+				if outp > 0 {
+					copy(i.buf[outp:], d)
+					return i.buf[:p]
+				}
+				return d
+			}
+			copy(i.buf[outp:], d)
+			outp = p
+			inCopyStart, outCopyStart = i.p, outp
+			if i.info.ccc < prevCC {
+				goto doNorm
+			}
+			continue
+		} else if r := i.rb.src.hangul(i.p); r != 0 {
+			outp = decomposeHangul(i.buf[:], r)
+			i.p += hangulUTF8Size
+			inCopyStart, outCopyStart = i.p, outp
+			if i.p >= i.rb.nsrc {
+				i.setDone()
+				break
+			} else if i.rb.src.hangul(i.p) != 0 {
+				i.next = nextHangul
+				return i.buf[:outp]
+			}
+		} else {
+			p := outp + sz
+			if p > len(i.buf) {
+				break
+			}
+			outp = p
+			i.p += sz
+		}
+		if i.p >= i.rb.nsrc {
+			i.setDone()
+			break
+		}
+		prevCC := i.info.tccc
+		i.info = i.rb.f.info(i.rb.src, i.p)
+		if v := i.rb.ss.next(i.info); v == ssStarter {
+			break
+		} else if v == ssOverflow {
+			i.next = nextCGJDecompose
+			break
+		}
+		if i.info.ccc < prevCC {
+			goto doNorm
+		}
+	}
+	if outCopyStart == 0 {
+		return i.returnSlice(inCopyStart, i.p)
+	} else if inCopyStart < i.p {
+		i.rb.src.copySlice(i.buf[outCopyStart:], inCopyStart, i.p)
+	}
+	return i.buf[:outp]
+doNorm:
+	// Insert what we have decomposed so far in the reorderBuffer.
+	// As we will only reorder, there will always be enough room.
+	i.rb.src.copySlice(i.buf[outCopyStart:], inCopyStart, i.p)
+	i.rb.insertDecomposed(i.buf[0:outp])
+	return doNormDecomposed(i)
+}
+
+func doNormDecomposed(i *Iter) []byte {
+	for {
+		i.rb.insertUnsafe(i.rb.src, i.p, i.info)
+		if i.p += int(i.info.size); i.p >= i.rb.nsrc {
+			i.setDone()
+			break
+		}
+		i.info = i.rb.f.info(i.rb.src, i.p)
+		if i.info.ccc == 0 {
+			break
+		}
+		if s := i.rb.ss.next(i.info); s == ssOverflow {
+			i.next = nextCGJDecompose
+			break
+		}
+	}
+	// new segment or too many combining characters: exit normalization
+	return i.buf[:i.rb.flushCopy(i.buf[:])]
+}
+
+func nextCGJDecompose(i *Iter) []byte {
+	i.rb.ss = 0
+	i.rb.insertCGJ()
+	i.next = nextDecomposed
+	i.rb.ss.first(i.info)
+	buf := doNormDecomposed(i)
+	return buf
+}
+
+// nextComposed is the implementation of Next for forms NFC and NFKC.
+func nextComposed(i *Iter) []byte {
+	outp, startp := 0, i.p
+	var prevCC uint8
+	for {
+		if !i.info.isYesC() {
+			goto doNorm
+		}
+		prevCC = i.info.tccc
+		sz := int(i.info.size)
+		if sz == 0 {
+			sz = 1 // illegal rune: copy byte-by-byte
+		}
+		p := outp + sz
+		if p > len(i.buf) {
+			break
+		}
+		outp = p
+		i.p += sz
+		if i.p >= i.rb.nsrc {
+			i.setDone()
+			break
+		} else if i.rb.src._byte(i.p) < utf8.RuneSelf {
+			i.rb.ss = 0
+			i.next = i.asciiF
+			break
+		}
+		i.info = i.rb.f.info(i.rb.src, i.p)
+		if v := i.rb.ss.next(i.info); v == ssStarter {
+			break
+		} else if v == ssOverflow {
+			i.next = nextCGJCompose
+			break
+		}
+		if i.info.ccc < prevCC {
+			goto doNorm
+		}
+	}
+	return i.returnSlice(startp, i.p)
+doNorm:
+	// res
