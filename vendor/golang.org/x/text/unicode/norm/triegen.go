@@ -100,4 +100,18 @@ func (c *normCompacter) Print(w io.Writer) (retErr error) {
 		for i, nv := range b {
 			if int(nv)-v != stride {
 				if v != 0 {
-					p(",hi:%#02x}
+					p(",hi:%#02x},", 0x80+i-1)
+				}
+				if nv != 0 {
+					p("\n{value:%#04x,lo:%#02x", nv, 0x80+i)
+				}
+			}
+			v = int(nv)
+		}
+		if v != 0 {
+			p(",hi:%#02x},", 0x80+len(b)-1)
+		}
+	}
+	p("\n}\n\n")
+	return
+}
