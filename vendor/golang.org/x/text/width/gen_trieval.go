@@ -26,4 +26,9 @@ const (
 
 	// tagNeedsFold is true for all fullwidth and halfwidth runes except for
 	// the Won sign U+20A9.
-	tagNe
+	tagNeedsFold = 0x1000
+
+	// The Korean Won sign is halfwidth, but SHOULD NOT be mapped to a wide
+	// variant.
+	wonSign rune = 0x20A9
+)
