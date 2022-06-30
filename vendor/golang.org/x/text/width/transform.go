@@ -181,4 +181,59 @@ type wideTransform struct {
 
 func (wideTransform) Span(src []byte, atEOF bool) (n int, err error) {
 	for n < len(src) {
-		// TODO: Consider ASCII fast path. Spec
+		// TODO: Consider ASCII fast path. Special-casing ASCII handling can
+		// reduce the ns/op of BenchmarkWideASCII by about 30%. This is probably
+		// not enough to warrant the extra code and complexity.
+		v, size := trie.lookup(src[n:])
+		if size == 0 { // incomplete UTF-8 encoding
+			if !atEOF {
+				err = transform.ErrShortSrc
+			} else {
+				n = len(src)
+			}
+			break
+		}
+		if k := elem(v).kind(); byte(v) == 0 || k != EastAsianHalfwidth && k != EastAsianNarrow {
+		} else {
+			err = transform.ErrEndOfSpan
+			break
+		}
+		n += size
+	}
+	return n, err
+}
+
+func (wideTransform) Transform(dst, src []byte, atEOF bool) (nDst, nSrc int, err error) {
+	for nSrc < len(src) {
+		// TODO: Consider ASCII fast path. Special-casing ASCII handling can
+		// reduce the ns/op of BenchmarkWideASCII by about 30%. This is probably
+		// not enough to warrant the extra code and complexity.
+		v, size := trie.lookup(src[nSrc:])
+		if size == 0 { // incomplete UTF-8 encoding
+			if !atEOF {
+				return nDst, nSrc, transform.ErrShortSrc
+			}
+			size = 1 // gobble 1 byte
+		}
+		if k := elem(v).kind(); byte(v) == 0 || k != EastAsianHalfwidth && k != EastAsianNarrow {
+			if size != copy(dst[nDst:], src[nSrc:nSrc+size]) {
+				return nDst, nSrc, transform.ErrShortDst
+			}
+			nDst += size
+		} else {
+			data := inverseData[byte(v)]
+			if len(dst)-nDst < int(data[0]) {
+				return nDst, nSrc, transform.ErrShortDst
+			}
+			i := 1
+			for end := int(data[0]); i < end; i++ {
+				dst[nDst] = data[i]
+				nDst++
+			}
+			dst[nDst] = data[i] ^ src[nSrc+size-1]
+			nDst++
+		}
+		nSrc += size
+	}
+	return nDst, nSrc, nil
+}
