@@ -721,4 +721,19 @@ func yaml_event_delete(event *yaml_event_t) {
 //                            // Valid mapping id is required.
 //    assert(document.nodes.start[mapping-1].type == YAML_MAPPING_NODE)
 //                            // A mapping node is required.
-//    assert(key > 0 && document.nodes.st
+//    assert(key > 0 && document.nodes.start + key <= document.nodes.top)
+//                            // Valid key id is required.
+//    assert(value > 0 && document.nodes.start + value <= document.nodes.top)
+//                            // Valid value id is required.
+//
+//    pair.key = key
+//    pair.value = value
+//
+//    if (!PUSH(&context,
+//                document.nodes.start[mapping-1].data.mapping.pairs, pair))
+//        return 0
+//
+//    return 1
+//}
+//
+//
