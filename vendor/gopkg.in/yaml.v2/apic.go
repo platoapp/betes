@@ -113,4 +113,129 @@ func yaml_emitter_set_output_string(emitter *yaml_emitter_t, output_buffer *[]by
 		panic("must set the output target only once")
 	}
 	emitter.write_handler = yaml_string_write_handler
-	emitter.output_bu
+	emitter.output_buffer = output_buffer
+}
+
+// Set a file output.
+func yaml_emitter_set_output_writer(emitter *yaml_emitter_t, w io.Writer) {
+	if emitter.write_handler != nil {
+		panic("must set the output target only once")
+	}
+	emitter.write_handler = yaml_writer_write_handler
+	emitter.output_writer = w
+}
+
+// Set the output encoding.
+func yaml_emitter_set_encoding(emitter *yaml_emitter_t, encoding yaml_encoding_t) {
+	if emitter.encoding != yaml_ANY_ENCODING {
+		panic("must set the output encoding only once")
+	}
+	emitter.encoding = encoding
+}
+
+// Set the canonical output style.
+func yaml_emitter_set_canonical(emitter *yaml_emitter_t, canonical bool) {
+	emitter.canonical = canonical
+}
+
+//// Set the indentation increment.
+func yaml_emitter_set_indent(emitter *yaml_emitter_t, indent int) {
+	if indent < 2 || indent > 9 {
+		indent = 2
+	}
+	emitter.best_indent = indent
+}
+
+// Set the preferred line width.
+func yaml_emitter_set_width(emitter *yaml_emitter_t, width int) {
+	if width < 0 {
+		width = -1
+	}
+	emitter.best_width = width
+}
+
+// Set if unescaped non-ASCII characters are allowed.
+func yaml_emitter_set_unicode(emitter *yaml_emitter_t, unicode bool) {
+	emitter.unicode = unicode
+}
+
+// Set the preferred line break character.
+func yaml_emitter_set_break(emitter *yaml_emitter_t, line_break yaml_break_t) {
+	emitter.line_break = line_break
+}
+
+///*
+// * Destroy a token object.
+// */
+//
+//YAML_DECLARE(void)
+//yaml_token_delete(yaml_token_t *token)
+//{
+//    assert(token);  // Non-NULL token object expected.
+//
+//    switch (token.type)
+//    {
+//        case YAML_TAG_DIRECTIVE_TOKEN:
+//            yaml_free(token.data.tag_directive.handle);
+//            yaml_free(token.data.tag_directive.prefix);
+//            break;
+//
+//        case YAML_ALIAS_TOKEN:
+//            yaml_free(token.data.alias.value);
+//            break;
+//
+//        case YAML_ANCHOR_TOKEN:
+//            yaml_free(token.data.anchor.value);
+//            break;
+//
+//        case YAML_TAG_TOKEN:
+//            yaml_free(token.data.tag.handle);
+//            yaml_free(token.data.tag.suffix);
+//            break;
+//
+//        case YAML_SCALAR_TOKEN:
+//            yaml_free(token.data.scalar.value);
+//            break;
+//
+//        default:
+//            break;
+//    }
+//
+//    memset(token, 0, sizeof(yaml_token_t));
+//}
+//
+///*
+// * Check if a string is a valid UTF-8 sequence.
+// *
+// * Check 'reader.c' for more details on UTF-8 encoding.
+// */
+//
+//static int
+//yaml_check_utf8(yaml_char_t *start, size_t length)
+//{
+//    yaml_char_t *end = start+length;
+//    yaml_char_t *pointer = start;
+//
+//    while (pointer < end) {
+//        unsigned char octet;
+//        unsigned int width;
+//        unsigned int value;
+//        size_t k;
+//
+//        octet = pointer[0];
+//        width = (octet & 0x80) == 0x00 ? 1 :
+//                (octet & 0xE0) == 0xC0 ? 2 :
+//                (octet & 0xF0) == 0xE0 ? 3 :
+//                (octet & 0xF8) == 0xF0 ? 4 : 0;
+//        value = (octet & 0x80) == 0x00 ? octet & 0x7F :
+//                (octet & 0xE0) == 0xC0 ? octet & 0x1F :
+//                (octet & 0xF0) == 0xE0 ? octet & 0x0F :
+//                (octet & 0xF8) == 0xF0 ? octet & 0x07 : 0;
+//        if (!width) return 0;
+//        if (pointer+width > end) return 0;
+//        for (k = 1; k < width; k ++) {
+//            octet = pointer[k];
+//            if ((octet & 0xC0) != 0x80) return 0;
+//            value = (value << 6) + (octet & 0x3F);
+//        }
+//        if (!((width ==
