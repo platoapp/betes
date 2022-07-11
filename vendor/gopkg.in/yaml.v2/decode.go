@@ -286,4 +286,145 @@ func (d *decoder) callUnmarshaler(n *node, u Unmarshaler) (good bool) {
 // d.prepare initializes and dereferences pointers and calls UnmarshalYAML
 // if a value is found to implement it.
 // It returns the initialized and dereferenced out value, whether
-// unmarshalling was already done by UnmarshalYAML, and if so whet
+// unmarshalling was already done by UnmarshalYAML, and if so whether
+// its types unmarshalled appropriately.
+//
+// If n holds a null value, prepare returns before doing anything.
+func (d *decoder) prepare(n *node, out reflect.Value) (newout reflect.Value, unmarshaled, good bool) {
+	if n.tag == yaml_NULL_TAG || n.kind == scalarNode && n.tag == "" && (n.value == "null" || n.value == "~" || n.value == "" && n.implicit) {
+		return out, false, false
+	}
+	again := true
+	for again {
+		again = false
+		if out.Kind() == reflect.Ptr {
+			if out.IsNil() {
+				out.Set(reflect.New(out.Type().Elem()))
+			}
+			out = out.Elem()
+			again = true
+		}
+		if out.CanAddr() {
+			if u, ok := out.Addr().Interface().(Unmarshaler); ok {
+				good = d.callUnmarshaler(n, u)
+				return out, true, good
+			}
+		}
+	}
+	return out, false, false
+}
+
+func (d *decoder) unmarshal(n *node, out reflect.Value) (good bool) {
+	switch n.kind {
+	case documentNode:
+		return d.document(n, out)
+	case aliasNode:
+		return d.alias(n, out)
+	}
+	out, unmarshaled, good := d.prepare(n, out)
+	if unmarshaled {
+		return good
+	}
+	switch n.kind {
+	case scalarNode:
+		good = d.scalar(n, out)
+	case mappingNode:
+		good = d.mapping(n, out)
+	case sequenceNode:
+		good = d.sequence(n, out)
+	default:
+		panic("internal error: unknown node kind: " + strconv.Itoa(n.kind))
+	}
+	return good
+}
+
+func (d *decoder) document(n *node, out reflect.Value) (good bool) {
+	if len(n.children) == 1 {
+		d.doc = n
+		d.unmarshal(n.children[0], out)
+		return true
+	}
+	return false
+}
+
+func (d *decoder) alias(n *node, out reflect.Value) (good bool) {
+	if d.aliases[n] {
+		// TODO this could actually be allowed in some circumstances.
+		failf("anchor '%s' value contains itself", n.value)
+	}
+	d.aliases[n] = true
+	good = d.unmarshal(n.alias, out)
+	delete(d.aliases, n)
+	return good
+}
+
+var zeroValue reflect.Value
+
+func resetMap(out reflect.Value) {
+	for _, k := range out.MapKeys() {
+		out.SetMapIndex(k, zeroValue)
+	}
+}
+
+func (d *decoder) scalar(n *node, out reflect.Value) bool {
+	var tag string
+	var resolved interface{}
+	if n.tag == "" && !n.implicit {
+		tag = yaml_STR_TAG
+		resolved = n.value
+	} else {
+		tag, resolved = resolve(n.tag, n.value)
+		if tag == yaml_BINARY_TAG {
+			data, err := base64.StdEncoding.DecodeString(resolved.(string))
+			if err != nil {
+				failf("!!binary value contains invalid base64 data")
+			}
+			resolved = string(data)
+		}
+	}
+	if resolved == nil {
+		if out.Kind() == reflect.Map && !out.CanAddr() {
+			resetMap(out)
+		} else {
+			out.Set(reflect.Zero(out.Type()))
+		}
+		return true
+	}
+	if resolvedv := reflect.ValueOf(resolved); out.Type() == resolvedv.Type() {
+		// We've resolved to exactly the type we want, so use that.
+		out.Set(resolvedv)
+		return true
+	}
+	// Perhaps we can use the value as a TextUnmarshaler to
+	// set its value.
+	if out.CanAddr() {
+		u, ok := out.Addr().Interface().(encoding.TextUnmarshaler)
+		if ok {
+			var text []byte
+			if tag == yaml_BINARY_TAG {
+				text = []byte(resolved.(string))
+			} else {
+				// We let any value be unmarshaled into TextUnmarshaler.
+				// That might be more lax than we'd like, but the
+				// TextUnmarshaler itself should bowl out any dubious values.
+				text = []byte(n.value)
+			}
+			err := u.UnmarshalText(text)
+			if err != nil {
+				fail(err)
+			}
+			return true
+		}
+	}
+	switch out.Kind() {
+	case reflect.String:
+		if tag == yaml_BINARY_TAG {
+			out.SetString(resolved.(string))
+			return true
+		}
+		if resolved != nil {
+			out.SetString(n.value)
+			return true
+		}
+	case reflect.Interface:
+		if 
