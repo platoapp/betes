@@ -427,4 +427,133 @@ func (d *decoder) scalar(n *node, out reflect.Value) bool {
 			return true
 		}
 	case reflect.Interface:
-		if 
+		if resolved == nil {
+			out.Set(reflect.Zero(out.Type()))
+		} else if tag == yaml_TIMESTAMP_TAG {
+			// It looks like a timestamp but for backward compatibility
+			// reasons we set it as a string, so that code that unmarshals
+			// timestamp-like values into interface{} will continue to
+			// see a string and not a time.Time.
+			// TODO(v3) Drop this.
+			out.Set(reflect.ValueOf(n.value))
+		} else {
+			out.Set(reflect.ValueOf(resolved))
+		}
+		return true
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		switch resolved := resolved.(type) {
+		case int:
+			if !out.OverflowInt(int64(resolved)) {
+				out.SetInt(int64(resolved))
+				return true
+			}
+		case int64:
+			if !out.OverflowInt(resolved) {
+				out.SetInt(resolved)
+				return true
+			}
+		case uint64:
+			if resolved <= math.MaxInt64 && !out.OverflowInt(int64(resolved)) {
+				out.SetInt(int64(resolved))
+				return true
+			}
+		case float64:
+			if resolved <= math.MaxInt64 && !out.OverflowInt(int64(resolved)) {
+				out.SetInt(int64(resolved))
+				return true
+			}
+		case string:
+			if out.Type() == durationType {
+				d, err := time.ParseDuration(resolved)
+				if err == nil {
+					out.SetInt(int64(d))
+					return true
+				}
+			}
+		}
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		switch resolved := resolved.(type) {
+		case int:
+			if resolved >= 0 && !out.OverflowUint(uint64(resolved)) {
+				out.SetUint(uint64(resolved))
+				return true
+			}
+		case int64:
+			if resolved >= 0 && !out.OverflowUint(uint64(resolved)) {
+				out.SetUint(uint64(resolved))
+				return true
+			}
+		case uint64:
+			if !out.OverflowUint(uint64(resolved)) {
+				out.SetUint(uint64(resolved))
+				return true
+			}
+		case float64:
+			if resolved <= math.MaxUint64 && !out.OverflowUint(uint64(resolved)) {
+				out.SetUint(uint64(resolved))
+				return true
+			}
+		}
+	case reflect.Bool:
+		switch resolved := resolved.(type) {
+		case bool:
+			out.SetBool(resolved)
+			return true
+		}
+	case reflect.Float32, reflect.Float64:
+		switch resolved := resolved.(type) {
+		case int:
+			out.SetFloat(float64(resolved))
+			return true
+		case int64:
+			out.SetFloat(float64(resolved))
+			return true
+		case uint64:
+			out.SetFloat(float64(resolved))
+			return true
+		case float64:
+			out.SetFloat(resolved)
+			return true
+		}
+	case reflect.Struct:
+		if resolvedv := reflect.ValueOf(resolved); out.Type() == resolvedv.Type() {
+			out.Set(resolvedv)
+			return true
+		}
+	case reflect.Ptr:
+		if out.Type().Elem() == reflect.TypeOf(resolved) {
+			// TODO DOes this make sense? When is out a Ptr except when decoding a nil value?
+			elem := reflect.New(out.Type().Elem())
+			elem.Elem().Set(reflect.ValueOf(resolved))
+			out.Set(elem)
+			return true
+		}
+	}
+	d.terror(n, tag, out)
+	return false
+}
+
+func settableValueOf(i interface{}) reflect.Value {
+	v := reflect.ValueOf(i)
+	sv := reflect.New(v.Type()).Elem()
+	sv.Set(v)
+	return sv
+}
+
+func (d *decoder) sequence(n *node, out reflect.Value) (good bool) {
+	l := len(n.children)
+
+	var iface reflect.Value
+	switch out.Kind() {
+	case reflect.Slice:
+		out.Set(reflect.MakeSlice(out.Type(), l, l))
+	case reflect.Array:
+		if l != out.Len() {
+			failf("invalid array: want %d elements but got %d", out.Len(), l)
+		}
+	case reflect.Interface:
+		// No type hints. Will have to use a generic sequence.
+		iface = out
+		out = settableValueOf(make([]interface{}, l))
+	default:
+		d.terror(n, yaml_SEQ
