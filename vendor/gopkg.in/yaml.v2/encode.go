@@ -162,4 +162,131 @@ func (e *encoder) mapv(tag string, in reflect.Value) {
 		sort.Sort(keys)
 		for _, k := range keys {
 			e.marshal("", k)
-			e.marshal("", in.MapIndex
+			e.marshal("", in.MapIndex(k))
+		}
+	})
+}
+
+func (e *encoder) itemsv(tag string, in reflect.Value) {
+	e.mappingv(tag, func() {
+		slice := in.Convert(reflect.TypeOf([]MapItem{})).Interface().([]MapItem)
+		for _, item := range slice {
+			e.marshal("", reflect.ValueOf(item.Key))
+			e.marshal("", reflect.ValueOf(item.Value))
+		}
+	})
+}
+
+func (e *encoder) structv(tag string, in reflect.Value) {
+	sinfo, err := getStructInfo(in.Type())
+	if err != nil {
+		panic(err)
+	}
+	e.mappingv(tag, func() {
+		for _, info := range sinfo.FieldsList {
+			var value reflect.Value
+			if info.Inline == nil {
+				value = in.Field(info.Num)
+			} else {
+				value = in.FieldByIndex(info.Inline)
+			}
+			if info.OmitEmpty && isZero(value) {
+				continue
+			}
+			e.marshal("", reflect.ValueOf(info.Key))
+			e.flow = info.Flow
+			e.marshal("", value)
+		}
+		if sinfo.InlineMap >= 0 {
+			m := in.Field(sinfo.InlineMap)
+			if m.Len() > 0 {
+				e.flow = false
+				keys := keyList(m.MapKeys())
+				sort.Sort(keys)
+				for _, k := range keys {
+					if _, found := sinfo.FieldsMap[k.String()]; found {
+						panic(fmt.Sprintf("Can't have key %q in inlined map; conflicts with struct field", k.String()))
+					}
+					e.marshal("", k)
+					e.flow = false
+					e.marshal("", m.MapIndex(k))
+				}
+			}
+		}
+	})
+}
+
+func (e *encoder) mappingv(tag string, f func()) {
+	implicit := tag == ""
+	style := yaml_BLOCK_MAPPING_STYLE
+	if e.flow {
+		e.flow = false
+		style = yaml_FLOW_MAPPING_STYLE
+	}
+	yaml_mapping_start_event_initialize(&e.event, nil, []byte(tag), implicit, style)
+	e.emit()
+	f()
+	yaml_mapping_end_event_initialize(&e.event)
+	e.emit()
+}
+
+func (e *encoder) slicev(tag string, in reflect.Value) {
+	implicit := tag == ""
+	style := yaml_BLOCK_SEQUENCE_STYLE
+	if e.flow {
+		e.flow = false
+		style = yaml_FLOW_SEQUENCE_STYLE
+	}
+	e.must(yaml_sequence_start_event_initialize(&e.event, nil, []byte(tag), implicit, style))
+	e.emit()
+	n := in.Len()
+	for i := 0; i < n; i++ {
+		e.marshal("", in.Index(i))
+	}
+	e.must(yaml_sequence_end_event_initialize(&e.event))
+	e.emit()
+}
+
+// isBase60 returns whether s is in base 60 notation as defined in YAML 1.1.
+//
+// The base 60 float notation in YAML 1.1 is a terrible idea and is unsupported
+// in YAML 1.2 and by this package, but these should be marshalled quoted for
+// the time being for compatibility with other parsers.
+func isBase60Float(s string) (result bool) {
+	// Fast path.
+	if s == "" {
+		return false
+	}
+	c := s[0]
+	if !(c == '+' || c == '-' || c >= '0' && c <= '9') || strings.IndexByte(s, ':') < 0 {
+		return false
+	}
+	// Do the full match.
+	return base60float.MatchString(s)
+}
+
+// From http://yaml.org/type/float.html, except the regular expression there
+// is bogus. In practice parsers do not enforce the "\.[0-9_]*" suffix.
+var base60float = regexp.MustCompile(`^[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+(?:\.[0-9_]*)?$`)
+
+func (e *encoder) stringv(tag string, in reflect.Value) {
+	var style yaml_scalar_style_t
+	s := in.String()
+	canUsePlain := true
+	switch {
+	case !utf8.ValidString(s):
+		if tag == yaml_BINARY_TAG {
+			failf("explicitly tagged !!binary data must be base64-encoded")
+		}
+		if tag != "" {
+			failf("cannot marshal invalid UTF-8 data as %s", shortTag(tag))
+		}
+		// It can't be encoded directly as YAML so use a binary tag
+		// and encode it as base64.
+		tag = yaml_BINARY_TAG
+		s = encodeBase64(s)
+	case tag == "":
+		// Check to see if it would resolve to a specific
+		// tag when encoded unquoted. If it doesn't,
+		// there's no need to quote it.
+		rtag, _ := resolve
