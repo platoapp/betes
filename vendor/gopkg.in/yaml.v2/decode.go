@@ -710,4 +710,66 @@ func (d *decoder) mappingStruct(n *node, out reflect.Value) (good bool) {
 		}
 		if info, ok := sinfo.FieldsMap[name.String()]; ok {
 			if d.strict {
-				if doneFields[info.Id] 
+				if doneFields[info.Id] {
+					d.terrors = append(d.terrors, fmt.Sprintf("line %d: field %s already set in type %s", ni.line+1, name.String(), out.Type()))
+					continue
+				}
+				doneFields[info.Id] = true
+			}
+			var field reflect.Value
+			if info.Inline == nil {
+				field = out.Field(info.Num)
+			} else {
+				field = out.FieldByIndex(info.Inline)
+			}
+			d.unmarshal(n.children[i+1], field)
+		} else if sinfo.InlineMap != -1 {
+			if inlineMap.IsNil() {
+				inlineMap.Set(reflect.MakeMap(inlineMap.Type()))
+			}
+			value := reflect.New(elemType).Elem()
+			d.unmarshal(n.children[i+1], value)
+			d.setMapIndex(n.children[i+1], inlineMap, name, value)
+		} else if d.strict {
+			d.terrors = append(d.terrors, fmt.Sprintf("line %d: field %s not found in type %s", ni.line+1, name.String(), out.Type()))
+		}
+	}
+	return true
+}
+
+func failWantMap() {
+	failf("map merge requires map or sequence of maps as the value")
+}
+
+func (d *decoder) merge(n *node, out reflect.Value) {
+	switch n.kind {
+	case mappingNode:
+		d.unmarshal(n, out)
+	case aliasNode:
+		an, ok := d.doc.anchors[n.value]
+		if ok && an.kind != mappingNode {
+			failWantMap()
+		}
+		d.unmarshal(n, out)
+	case sequenceNode:
+		// Step backwards as earlier nodes take precedence.
+		for i := len(n.children) - 1; i >= 0; i-- {
+			ni := n.children[i]
+			if ni.kind == aliasNode {
+				an, ok := d.doc.anchors[ni.value]
+				if ok && an.kind != mappingNode {
+					failWantMap()
+				}
+			} else if ni.kind != mappingNode {
+				failWantMap()
+			}
+			d.unmarshal(ni, out)
+		}
+	default:
+		failWantMap()
+	}
+}
+
+func isMerge(n *node) bool {
+	return n.kind == scalarNode && n.value == "<<" && (n.implicit == true || n.tag == yaml_MERGE_TAG)
+}
