@@ -289,4 +289,74 @@ func (e *encoder) stringv(tag string, in reflect.Value) {
 		// Check to see if it would resolve to a specific
 		// tag when encoded unquoted. If it doesn't,
 		// there's no need to quote it.
-		rtag, _ := resolve
+		rtag, _ := resolve("", s)
+		canUsePlain = rtag == yaml_STR_TAG && !isBase60Float(s)
+	}
+	// Note: it's possible for user code to emit invalid YAML
+	// if they explicitly specify a tag and a string containing
+	// text that's incompatible with that tag.
+	switch {
+	case strings.Contains(s, "\n"):
+		style = yaml_LITERAL_SCALAR_STYLE
+	case canUsePlain:
+		style = yaml_PLAIN_SCALAR_STYLE
+	default:
+		style = yaml_DOUBLE_QUOTED_SCALAR_STYLE
+	}
+	e.emitScalar(s, "", tag, style)
+}
+
+func (e *encoder) boolv(tag string, in reflect.Value) {
+	var s string
+	if in.Bool() {
+		s = "true"
+	} else {
+		s = "false"
+	}
+	e.emitScalar(s, "", tag, yaml_PLAIN_SCALAR_STYLE)
+}
+
+func (e *encoder) intv(tag string, in reflect.Value) {
+	s := strconv.FormatInt(in.Int(), 10)
+	e.emitScalar(s, "", tag, yaml_PLAIN_SCALAR_STYLE)
+}
+
+func (e *encoder) uintv(tag string, in reflect.Value) {
+	s := strconv.FormatUint(in.Uint(), 10)
+	e.emitScalar(s, "", tag, yaml_PLAIN_SCALAR_STYLE)
+}
+
+func (e *encoder) timev(tag string, in reflect.Value) {
+	t := in.Interface().(time.Time)
+	s := t.Format(time.RFC3339Nano)
+	e.emitScalar(s, "", tag, yaml_PLAIN_SCALAR_STYLE)
+}
+
+func (e *encoder) floatv(tag string, in reflect.Value) {
+	// Issue #352: When formatting, use the precision of the underlying value
+	precision := 64
+	if in.Kind() == reflect.Float32 {
+		precision = 32
+	}
+
+	s := strconv.FormatFloat(in.Float(), 'g', -1, precision)
+	switch s {
+	case "+Inf":
+		s = ".inf"
+	case "-Inf":
+		s = "-.inf"
+	case "NaN":
+		s = ".nan"
+	}
+	e.emitScalar(s, "", tag, yaml_PLAIN_SCALAR_STYLE)
+}
+
+func (e *encoder) nilv() {
+	e.emitScalar("null", "", "", yaml_PLAIN_SCALAR_STYLE)
+}
+
+func (e *encoder) emitScalar(value, anchor, tag string, style yaml_scalar_style_t) {
+	implicit := tag == ""
+	e.must(yaml_scalar_event_initialize(&e.event, []byte(anchor), []byte(tag), []byte(value), implicit, implicit, style))
+	e.emit()
+}
