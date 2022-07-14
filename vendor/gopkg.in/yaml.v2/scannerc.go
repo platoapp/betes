@@ -87,4 +87,135 @@ import (
 // Note that the VERSION-DIRECTIVE and TAG-DIRECTIVE tokens occupy a whole
 // line.
 //
-// The document s
+// The document start and end indicators are represented by:
+//
+//      DOCUMENT-START
+//      DOCUMENT-END
+//
+// Note that if a YAML stream contains an implicit document (without '---'
+// and '...' indicators), no DOCUMENT-START and DOCUMENT-END tokens will be
+// produced.
+//
+// In the following examples, we present whole documents together with the
+// produced tokens.
+//
+//      1. An implicit document:
+//
+//          'a scalar'
+//
+//      Tokens:
+//
+//          STREAM-START(utf-8)
+//          SCALAR("a scalar",single-quoted)
+//          STREAM-END
+//
+//      2. An explicit document:
+//
+//          ---
+//          'a scalar'
+//          ...
+//
+//      Tokens:
+//
+//          STREAM-START(utf-8)
+//          DOCUMENT-START
+//          SCALAR("a scalar",single-quoted)
+//          DOCUMENT-END
+//          STREAM-END
+//
+//      3. Several documents in a stream:
+//
+//          'a scalar'
+//          ---
+//          'another scalar'
+//          ---
+//          'yet another scalar'
+//
+//      Tokens:
+//
+//          STREAM-START(utf-8)
+//          SCALAR("a scalar",single-quoted)
+//          DOCUMENT-START
+//          SCALAR("another scalar",single-quoted)
+//          DOCUMENT-START
+//          SCALAR("yet another scalar",single-quoted)
+//          STREAM-END
+//
+// We have already introduced the SCALAR token above.  The following tokens are
+// used to describe aliases, anchors, tag, and scalars:
+//
+//      ALIAS(anchor)
+//      ANCHOR(anchor)
+//      TAG(handle,suffix)
+//      SCALAR(value,style)
+//
+// The following series of examples illustrate the usage of these tokens:
+//
+//      1. A recursive sequence:
+//
+//          &A [ *A ]
+//
+//      Tokens:
+//
+//          STREAM-START(utf-8)
+//          ANCHOR("A")
+//          FLOW-SEQUENCE-START
+//          ALIAS("A")
+//          FLOW-SEQUENCE-END
+//          STREAM-END
+//
+//      2. A tagged scalar:
+//
+//          !!float "3.14"  # A good approximation.
+//
+//      Tokens:
+//
+//          STREAM-START(utf-8)
+//          TAG("!!","float")
+//          SCALAR("3.14",double-quoted)
+//          STREAM-END
+//
+//      3. Various scalar styles:
+//
+//          --- # Implicit empty plain scalars do not produce tokens.
+//          --- a plain scalar
+//          --- 'a single-quoted scalar'
+//          --- "a double-quoted scalar"
+//          --- |-
+//            a literal scalar
+//          --- >-
+//            a folded
+//            scalar
+//
+//      Tokens:
+//
+//          STREAM-START(utf-8)
+//          DOCUMENT-START
+//          DOCUMENT-START
+//          SCALAR("a plain scalar",plain)
+//          DOCUMENT-START
+//          SCALAR("a single-quoted scalar",single-quoted)
+//          DOCUMENT-START
+//          SCALAR("a double-quoted scalar",double-quoted)
+//          DOCUMENT-START
+//          SCALAR("a literal scalar",literal)
+//          DOCUMENT-START
+//          SCALAR("a folded scalar",folded)
+//          STREAM-END
+//
+// Now it's time to review collection-related tokens. We will start with
+// flow collections:
+//
+//      FLOW-SEQUENCE-START
+//      FLOW-SEQUENCE-END
+//      FLOW-MAPPING-START
+//      FLOW-MAPPING-END
+//      FLOW-ENTRY
+//      KEY
+//      VALUE
+//
+// The tokens FLOW-SEQUENCE-START, FLOW-SEQUENCE-END, FLOW-MAPPING-START, and
+// FLOW-MAPPING-END represent the indicators '[', ']', '{', and '}'
+// correspondingly.  FLOW-ENTRY represent the ',' indicator.  Finally the
+// indicators '?' and ':', which are used for denoting mapping keys and values,
+// are represented by the KEY and VALUE toke
