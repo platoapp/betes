@@ -344,4 +344,134 @@ import (
 //          STREAM-START(utf-8)
 //          BLOCK-MAPPING-START
 //          KEY
-//          SCALAR("a simple key",pla
+//          SCALAR("a simple key",plain)
+//          VALUE
+//          SCALAR("a value",plain)
+//          KEY
+//          SCALAR("a complex key",plain)
+//          VALUE
+//          SCALAR("another value",plain)
+//          KEY
+//          SCALAR("a mapping",plain)
+//          BLOCK-MAPPING-START
+//          KEY
+//          SCALAR("key 1",plain)
+//          VALUE
+//          SCALAR("value 1",plain)
+//          KEY
+//          SCALAR("key 2",plain)
+//          VALUE
+//          SCALAR("value 2",plain)
+//          BLOCK-END
+//          KEY
+//          SCALAR("a sequence",plain)
+//          VALUE
+//          BLOCK-SEQUENCE-START
+//          BLOCK-ENTRY
+//          SCALAR("item 1",plain)
+//          BLOCK-ENTRY
+//          SCALAR("item 2",plain)
+//          BLOCK-END
+//          BLOCK-END
+//          STREAM-END
+//
+// YAML does not always require to start a new block collection from a new
+// line.  If the current line contains only '-', '?', and ':' indicators, a new
+// block collection may start at the current line.  The following examples
+// illustrate this case:
+//
+//      1. Collections in a sequence:
+//
+//          - - item 1
+//            - item 2
+//          - key 1: value 1
+//            key 2: value 2
+//          - ? complex key
+//            : complex value
+//
+//      Tokens:
+//
+//          STREAM-START(utf-8)
+//          BLOCK-SEQUENCE-START
+//          BLOCK-ENTRY
+//          BLOCK-SEQUENCE-START
+//          BLOCK-ENTRY
+//          SCALAR("item 1",plain)
+//          BLOCK-ENTRY
+//          SCALAR("item 2",plain)
+//          BLOCK-END
+//          BLOCK-ENTRY
+//          BLOCK-MAPPING-START
+//          KEY
+//          SCALAR("key 1",plain)
+//          VALUE
+//          SCALAR("value 1",plain)
+//          KEY
+//          SCALAR("key 2",plain)
+//          VALUE
+//          SCALAR("value 2",plain)
+//          BLOCK-END
+//          BLOCK-ENTRY
+//          BLOCK-MAPPING-START
+//          KEY
+//          SCALAR("complex key")
+//          VALUE
+//          SCALAR("complex value")
+//          BLOCK-END
+//          BLOCK-END
+//          STREAM-END
+//
+//      2. Collections in a mapping:
+//
+//          ? a sequence
+//          : - item 1
+//            - item 2
+//          ? a mapping
+//          : key 1: value 1
+//            key 2: value 2
+//
+//      Tokens:
+//
+//          STREAM-START(utf-8)
+//          BLOCK-MAPPING-START
+//          KEY
+//          SCALAR("a sequence",plain)
+//          VALUE
+//          BLOCK-SEQUENCE-START
+//          BLOCK-ENTRY
+//          SCALAR("item 1",plain)
+//          BLOCK-ENTRY
+//          SCALAR("item 2",plain)
+//          BLOCK-END
+//          KEY
+//          SCALAR("a mapping",plain)
+//          VALUE
+//          BLOCK-MAPPING-START
+//          KEY
+//          SCALAR("key 1",plain)
+//          VALUE
+//          SCALAR("value 1",plain)
+//          KEY
+//          SCALAR("key 2",plain)
+//          VALUE
+//          SCALAR("value 2",plain)
+//          BLOCK-END
+//          BLOCK-END
+//          STREAM-END
+//
+// YAML also permits non-indented sequences if they are included into a block
+// mapping.  In this case, the token BLOCK-SEQUENCE-START is not produced:
+//
+//      key:
+//      - item 1    # BLOCK-SEQUENCE-START is NOT produced here.
+//      - item 2
+//
+// Tokens:
+//
+//      STREAM-START(utf-8)
+//      BLOCK-MAPPING-START
+//      KEY
+//      SCALAR("key",plain)
+//      VALUE
+//      BLOCK-ENTRY
+//      SCALAR("
