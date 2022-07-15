@@ -218,4 +218,130 @@ import (
 // FLOW-MAPPING-END represent the indicators '[', ']', '{', and '}'
 // correspondingly.  FLOW-ENTRY represent the ',' indicator.  Finally the
 // indicators '?' and ':', which are used for denoting mapping keys and values,
-// are represented by the KEY and VALUE toke
+// are represented by the KEY and VALUE tokens.
+//
+// The following examples show flow collections:
+//
+//      1. A flow sequence:
+//
+//          [item 1, item 2, item 3]
+//
+//      Tokens:
+//
+//          STREAM-START(utf-8)
+//          FLOW-SEQUENCE-START
+//          SCALAR("item 1",plain)
+//          FLOW-ENTRY
+//          SCALAR("item 2",plain)
+//          FLOW-ENTRY
+//          SCALAR("item 3",plain)
+//          FLOW-SEQUENCE-END
+//          STREAM-END
+//
+//      2. A flow mapping:
+//
+//          {
+//              a simple key: a value,  # Note that the KEY token is produced.
+//              ? a complex key: another value,
+//          }
+//
+//      Tokens:
+//
+//          STREAM-START(utf-8)
+//          FLOW-MAPPING-START
+//          KEY
+//          SCALAR("a simple key",plain)
+//          VALUE
+//          SCALAR("a value",plain)
+//          FLOW-ENTRY
+//          KEY
+//          SCALAR("a complex key",plain)
+//          VALUE
+//          SCALAR("another value",plain)
+//          FLOW-ENTRY
+//          FLOW-MAPPING-END
+//          STREAM-END
+//
+// A simple key is a key which is not denoted by the '?' indicator.  Note that
+// the Scanner still produce the KEY token whenever it encounters a simple key.
+//
+// For scanning block collections, the following tokens are used (note that we
+// repeat KEY and VALUE here):
+//
+//      BLOCK-SEQUENCE-START
+//      BLOCK-MAPPING-START
+//      BLOCK-END
+//      BLOCK-ENTRY
+//      KEY
+//      VALUE
+//
+// The tokens BLOCK-SEQUENCE-START and BLOCK-MAPPING-START denote indentation
+// increase that precedes a block collection (cf. the INDENT token in Python).
+// The token BLOCK-END denote indentation decrease that ends a block collection
+// (cf. the DEDENT token in Python).  However YAML has some syntax pecularities
+// that makes detections of these tokens more complex.
+//
+// The tokens BLOCK-ENTRY, KEY, and VALUE are used to represent the indicators
+// '-', '?', and ':' correspondingly.
+//
+// The following examples show how the tokens BLOCK-SEQUENCE-START,
+// BLOCK-MAPPING-START, and BLOCK-END are emitted by the Scanner:
+//
+//      1. Block sequences:
+//
+//          - item 1
+//          - item 2
+//          -
+//            - item 3.1
+//            - item 3.2
+//          -
+//            key 1: value 1
+//            key 2: value 2
+//
+//      Tokens:
+//
+//          STREAM-START(utf-8)
+//          BLOCK-SEQUENCE-START
+//          BLOCK-ENTRY
+//          SCALAR("item 1",plain)
+//          BLOCK-ENTRY
+//          SCALAR("item 2",plain)
+//          BLOCK-ENTRY
+//          BLOCK-SEQUENCE-START
+//          BLOCK-ENTRY
+//          SCALAR("item 3.1",plain)
+//          BLOCK-ENTRY
+//          SCALAR("item 3.2",plain)
+//          BLOCK-END
+//          BLOCK-ENTRY
+//          BLOCK-MAPPING-START
+//          KEY
+//          SCALAR("key 1",plain)
+//          VALUE
+//          SCALAR("value 1",plain)
+//          KEY
+//          SCALAR("key 2",plain)
+//          VALUE
+//          SCALAR("value 2",plain)
+//          BLOCK-END
+//          BLOCK-END
+//          STREAM-END
+//
+//      2. Block mappings:
+//
+//          a simple key: a value   # The KEY token is produced here.
+//          ? a complex key
+//          : another value
+//          a mapping:
+//            key 1: value 1
+//            key 2: value 2
+//          a sequence:
+//            - item 1
+//            - item 2
+//
+//      Tokens:
+//
+//          STREAM-START(utf-8)
+//          BLOCK-MAPPING-START
+//          KEY
+//          SCALAR("a simple key",pla
