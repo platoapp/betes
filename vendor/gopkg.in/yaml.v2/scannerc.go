@@ -474,4 +474,130 @@ import (
 //      SCALAR("key",plain)
 //      VALUE
 //      BLOCK-ENTRY
-//      SCALAR("
+//      SCALAR("item 1",plain)
+//      BLOCK-ENTRY
+//      SCALAR("item 2",plain)
+//      BLOCK-END
+//
+
+// Ensure that the buffer contains the required number of characters.
+// Return true on success, false on failure (reader error or memory error).
+func cache(parser *yaml_parser_t, length int) bool {
+	// [Go] This was inlined: !cache(A, B) -> unread < B && !update(A, B)
+	return parser.unread >= length || yaml_parser_update_buffer(parser, length)
+}
+
+// Advance the buffer pointer.
+func skip(parser *yaml_parser_t) {
+	parser.mark.index++
+	parser.mark.column++
+	parser.unread--
+	parser.buffer_pos += width(parser.buffer[parser.buffer_pos])
+}
+
+func skip_line(parser *yaml_parser_t) {
+	if is_crlf(parser.buffer, parser.buffer_pos) {
+		parser.mark.index += 2
+		parser.mark.column = 0
+		parser.mark.line++
+		parser.unread -= 2
+		parser.buffer_pos += 2
+	} else if is_break(parser.buffer, parser.buffer_pos) {
+		parser.mark.index++
+		parser.mark.column = 0
+		parser.mark.line++
+		parser.unread--
+		parser.buffer_pos += width(parser.buffer[parser.buffer_pos])
+	}
+}
+
+// Copy a character to a string buffer and advance pointers.
+func read(parser *yaml_parser_t, s []byte) []byte {
+	w := width(parser.buffer[parser.buffer_pos])
+	if w == 0 {
+		panic("invalid character sequence")
+	}
+	if len(s) == 0 {
+		s = make([]byte, 0, 32)
+	}
+	if w == 1 && len(s)+w <= cap(s) {
+		s = s[:len(s)+1]
+		s[len(s)-1] = parser.buffer[parser.buffer_pos]
+		parser.buffer_pos++
+	} else {
+		s = append(s, parser.buffer[parser.buffer_pos:parser.buffer_pos+w]...)
+		parser.buffer_pos += w
+	}
+	parser.mark.index++
+	parser.mark.column++
+	parser.unread--
+	return s
+}
+
+// Copy a line break character to a string buffer and advance pointers.
+func read_line(parser *yaml_parser_t, s []byte) []byte {
+	buf := parser.buffer
+	pos := parser.buffer_pos
+	switch {
+	case buf[pos] == '\r' && buf[pos+1] == '\n':
+		// CR LF . LF
+		s = append(s, '\n')
+		parser.buffer_pos += 2
+		parser.mark.index++
+		parser.unread--
+	case buf[pos] == '\r' || buf[pos] == '\n':
+		// CR|LF . LF
+		s = append(s, '\n')
+		parser.buffer_pos += 1
+	case buf[pos] == '\xC2' && buf[pos+1] == '\x85':
+		// NEL . LF
+		s = append(s, '\n')
+		parser.buffer_pos += 2
+	case buf[pos] == '\xE2' && buf[pos+1] == '\x80' && (buf[pos+2] == '\xA8' || buf[pos+2] == '\xA9'):
+		// LS|PS . LS|PS
+		s = append(s, buf[parser.buffer_pos:pos+3]...)
+		parser.buffer_pos += 3
+	default:
+		return s
+	}
+	parser.mark.index++
+	parser.mark.column = 0
+	parser.mark.line++
+	parser.unread--
+	return s
+}
+
+// Get the next token.
+func yaml_parser_scan(parser *yaml_parser_t, token *yaml_token_t) bool {
+	// Erase the token object.
+	*token = yaml_token_t{} // [Go] Is this necessary?
+
+	// No tokens after STREAM-END or error.
+	if parser.stream_end_produced || parser.error != yaml_NO_ERROR {
+		return true
+	}
+
+	// Ensure that the tokens queue contains enough tokens.
+	if !parser.token_available {
+		if !yaml_parser_fetch_more_tokens(parser) {
+			return false
+		}
+	}
+
+	// Fetch the next token from the queue.
+	*token = parser.tokens[parser.tokens_head]
+	parser.tokens_head++
+	parser.tokens_parsed++
+	parser.token_available = false
+
+	if token.typ == yaml_STREAM_END_TOKEN {
+		parser.stream_end_produced = true
+	}
+	return true
+}
+
+// Set the scanner error and return false.
+func yaml_parser_set_scanner_error(parser *yaml_parser_t, context string, context_mark yaml_mark_t, problem string) bool {
+	parser.error = yaml_SCANNER_ERROR
+	parser.context = context
+	parse
