@@ -600,4 +600,126 @@ func yaml_parser_scan(parser *yaml_parser_t, token *yaml_token_t) bool {
 func yaml_parser_set_scanner_error(parser *yaml_parser_t, context string, context_mark yaml_mark_t, problem string) bool {
 	parser.error = yaml_SCANNER_ERROR
 	parser.context = context
-	parse
+	parser.context_mark = context_mark
+	parser.problem = problem
+	parser.problem_mark = parser.mark
+	return false
+}
+
+func yaml_parser_set_scanner_tag_error(parser *yaml_parser_t, directive bool, context_mark yaml_mark_t, problem string) bool {
+	context := "while parsing a tag"
+	if directive {
+		context = "while parsing a %TAG directive"
+	}
+	return yaml_parser_set_scanner_error(parser, context, context_mark, problem)
+}
+
+func trace(args ...interface{}) func() {
+	pargs := append([]interface{}{"+++"}, args...)
+	fmt.Println(pargs...)
+	pargs = append([]interface{}{"---"}, args...)
+	return func() { fmt.Println(pargs...) }
+}
+
+// Ensure that the tokens queue contains at least one token which can be
+// returned to the Parser.
+func yaml_parser_fetch_more_tokens(parser *yaml_parser_t) bool {
+	// While we need more tokens to fetch, do it.
+	for {
+		// Check if we really need to fetch more tokens.
+		need_more_tokens := false
+
+		if parser.tokens_head == len(parser.tokens) {
+			// Queue is empty.
+			need_more_tokens = true
+		} else {
+			// Check if any potential simple key may occupy the head position.
+			if !yaml_parser_stale_simple_keys(parser) {
+				return false
+			}
+
+			for i := range parser.simple_keys {
+				simple_key := &parser.simple_keys[i]
+				if simple_key.possible && simple_key.token_number == parser.tokens_parsed {
+					need_more_tokens = true
+					break
+				}
+			}
+		}
+
+		// We are finished.
+		if !need_more_tokens {
+			break
+		}
+		// Fetch the next token.
+		if !yaml_parser_fetch_next_token(parser) {
+			return false
+		}
+	}
+
+	parser.token_available = true
+	return true
+}
+
+// The dispatcher for token fetchers.
+func yaml_parser_fetch_next_token(parser *yaml_parser_t) bool {
+	// Ensure that the buffer is initialized.
+	if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+		return false
+	}
+
+	// Check if we just started scanning.  Fetch STREAM-START then.
+	if !parser.stream_start_produced {
+		return yaml_parser_fetch_stream_start(parser)
+	}
+
+	// Eat whitespaces and comments until we reach the next token.
+	if !yaml_parser_scan_to_next_token(parser) {
+		return false
+	}
+
+	// Remove obsolete potential simple keys.
+	if !yaml_parser_stale_simple_keys(parser) {
+		return false
+	}
+
+	// Check the indentation level against the current column.
+	if !yaml_parser_unroll_indent(parser, parser.mark.column) {
+		return false
+	}
+
+	// Ensure that the buffer contains at least 4 characters.  4 is the length
+	// of the longest indicators ('--- ' and '... ').
+	if parser.unread < 4 && !yaml_parser_update_buffer(parser, 4) {
+		return false
+	}
+
+	// Is it the end of the stream?
+	if is_z(parser.buffer, parser.buffer_pos) {
+		return yaml_parser_fetch_stream_end(parser)
+	}
+
+	// Is it a directive?
+	if parser.mark.column == 0 && parser.buffer[parser.buffer_pos] == '%' {
+		return yaml_parser_fetch_directive(parser)
+	}
+
+	buf := parser.buffer
+	pos := parser.buffer_pos
+
+	// Is it the document start indicator?
+	if parser.mark.column == 0 && buf[pos] == '-' && buf[pos+1] == '-' && buf[pos+2] == '-' && is_blankz(buf, pos+3) {
+		return yaml_parser_fetch_document_indicator(parser, yaml_DOCUMENT_START_TOKEN)
+	}
+
+	// Is it the document end indicator?
+	if parser.mark.column == 0 && buf[pos] == '.' && buf[pos+1] == '.' && buf[pos+2] == '.' && is_blankz(buf, pos+3) {
+		return yaml_parser_fetch_document_indicator(parser, yaml_DOCUMENT_END_TOKEN)
+	}
+
+	// Is it the flow sequence start indicator?
+	if buf[pos] == '[' {
+		return yaml_parser_fetch_flow_collection_start(parser, yaml_FLOW_SEQUENCE_START_TOKEN)
+	}
+
+	// Is
