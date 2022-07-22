@@ -722,4 +722,101 @@ func yaml_parser_fetch_next_token(parser *yaml_parser_t) bool {
 		return yaml_parser_fetch_flow_collection_start(parser, yaml_FLOW_SEQUENCE_START_TOKEN)
 	}
 
-	// Is
+	// Is it the flow mapping start indicator?
+	if parser.buffer[parser.buffer_pos] == '{' {
+		return yaml_parser_fetch_flow_collection_start(parser, yaml_FLOW_MAPPING_START_TOKEN)
+	}
+
+	// Is it the flow sequence end indicator?
+	if parser.buffer[parser.buffer_pos] == ']' {
+		return yaml_parser_fetch_flow_collection_end(parser,
+			yaml_FLOW_SEQUENCE_END_TOKEN)
+	}
+
+	// Is it the flow mapping end indicator?
+	if parser.buffer[parser.buffer_pos] == '}' {
+		return yaml_parser_fetch_flow_collection_end(parser,
+			yaml_FLOW_MAPPING_END_TOKEN)
+	}
+
+	// Is it the flow entry indicator?
+	if parser.buffer[parser.buffer_pos] == ',' {
+		return yaml_parser_fetch_flow_entry(parser)
+	}
+
+	// Is it the block entry indicator?
+	if parser.buffer[parser.buffer_pos] == '-' && is_blankz(parser.buffer, parser.buffer_pos+1) {
+		return yaml_parser_fetch_block_entry(parser)
+	}
+
+	// Is it the key indicator?
+	if parser.buffer[parser.buffer_pos] == '?' && (parser.flow_level > 0 || is_blankz(parser.buffer, parser.buffer_pos+1)) {
+		return yaml_parser_fetch_key(parser)
+	}
+
+	// Is it the value indicator?
+	if parser.buffer[parser.buffer_pos] == ':' && (parser.flow_level > 0 || is_blankz(parser.buffer, parser.buffer_pos+1)) {
+		return yaml_parser_fetch_value(parser)
+	}
+
+	// Is it an alias?
+	if parser.buffer[parser.buffer_pos] == '*' {
+		return yaml_parser_fetch_anchor(parser, yaml_ALIAS_TOKEN)
+	}
+
+	// Is it an anchor?
+	if parser.buffer[parser.buffer_pos] == '&' {
+		return yaml_parser_fetch_anchor(parser, yaml_ANCHOR_TOKEN)
+	}
+
+	// Is it a tag?
+	if parser.buffer[parser.buffer_pos] == '!' {
+		return yaml_parser_fetch_tag(parser)
+	}
+
+	// Is it a literal scalar?
+	if parser.buffer[parser.buffer_pos] == '|' && parser.flow_level == 0 {
+		return yaml_parser_fetch_block_scalar(parser, true)
+	}
+
+	// Is it a folded scalar?
+	if parser.buffer[parser.buffer_pos] == '>' && parser.flow_level == 0 {
+		return yaml_parser_fetch_block_scalar(parser, false)
+	}
+
+	// Is it a single-quoted scalar?
+	if parser.buffer[parser.buffer_pos] == '\'' {
+		return yaml_parser_fetch_flow_scalar(parser, true)
+	}
+
+	// Is it a double-quoted scalar?
+	if parser.buffer[parser.buffer_pos] == '"' {
+		return yaml_parser_fetch_flow_scalar(parser, false)
+	}
+
+	// Is it a plain scalar?
+	//
+	// A plain scalar may start with any non-blank characters except
+	//
+	//      '-', '?', ':', ',', '[', ']', '{', '}',
+	//      '#', '&', '*', '!', '|', '>', '\'', '\"',
+	//      '%', '@', '`'.
+	//
+	// In the block context (and, for the '-' indicator, in the flow context
+	// too), it may also start with the characters
+	//
+	//      '-', '?', ':'
+	//
+	// if it is followed by a non-space character.
+	//
+	// The last rule is more restrictive than the specification requires.
+	// [Go] Make this logic more reasonable.
+	//switch parser.buffer[parser.buffer_pos] {
+	//case '-', '?', ':', ',', '?', '-', ',', ':', ']', '[', '}', '{', '&', '#', '!', '*', '>', '|', '"', '\'', '@', '%', '-', '`':
+	//}
+	if !(is_blankz(parser.buffer, parser.buffer_pos) || parser.buffer[parser.buffer_pos] == '-' ||
+		parser.buffer[parser.buffer_pos] == '?' || parser.buffer[parser.buffer_pos] == ':' ||
+		parser.buffer[parser.buffer_pos] == ',' || parser.buffer[parser.buffer_pos] == '[' ||
+		parser.buffer[parser.buffer_pos] == ']' || parser.buffer[parser.buffer_pos] == '{' ||
+		parser.buffer[parser.buffer_pos] == '}' || parser.buffer[parser.buffer_pos] == '#' ||
+		parser.buffer[parser.buffer_pos] == '&' || parser.buff
