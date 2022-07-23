@@ -912,4 +912,131 @@ func yaml_parser_increase_flow_level(parser *yaml_parser_t) bool {
 	parser.simple_keys = append(parser.simple_keys, yaml_simple_key_t{})
 
 	// Increase the flow level.
-	p
+	parser.flow_level++
+	return true
+}
+
+// Decrease the flow level.
+func yaml_parser_decrease_flow_level(parser *yaml_parser_t) bool {
+	if parser.flow_level > 0 {
+		parser.flow_level--
+		parser.simple_keys = parser.simple_keys[:len(parser.simple_keys)-1]
+	}
+	return true
+}
+
+// Push the current indentation level to the stack and set the new level
+// the current column is greater than the indentation level.  In this case,
+// append or insert the specified token into the token queue.
+func yaml_parser_roll_indent(parser *yaml_parser_t, column, number int, typ yaml_token_type_t, mark yaml_mark_t) bool {
+	// In the flow context, do nothing.
+	if parser.flow_level > 0 {
+		return true
+	}
+
+	if parser.indent < column {
+		// Push the current indentation level to the stack and set the new
+		// indentation level.
+		parser.indents = append(parser.indents, parser.indent)
+		parser.indent = column
+
+		// Create a token and insert it into the queue.
+		token := yaml_token_t{
+			typ:        typ,
+			start_mark: mark,
+			end_mark:   mark,
+		}
+		if number > -1 {
+			number -= parser.tokens_parsed
+		}
+		yaml_insert_token(parser, number, &token)
+	}
+	return true
+}
+
+// Pop indentation levels from the indents stack until the current level
+// becomes less or equal to the column.  For each indentation level, append
+// the BLOCK-END token.
+func yaml_parser_unroll_indent(parser *yaml_parser_t, column int) bool {
+	// In the flow context, do nothing.
+	if parser.flow_level > 0 {
+		return true
+	}
+
+	// Loop through the indentation levels in the stack.
+	for parser.indent > column {
+		// Create a token and append it to the queue.
+		token := yaml_token_t{
+			typ:        yaml_BLOCK_END_TOKEN,
+			start_mark: parser.mark,
+			end_mark:   parser.mark,
+		}
+		yaml_insert_token(parser, -1, &token)
+
+		// Pop the indentation level.
+		parser.indent = parser.indents[len(parser.indents)-1]
+		parser.indents = parser.indents[:len(parser.indents)-1]
+	}
+	return true
+}
+
+// Initialize the scanner and produce the STREAM-START token.
+func yaml_parser_fetch_stream_start(parser *yaml_parser_t) bool {
+
+	// Set the initial indentation.
+	parser.indent = -1
+
+	// Initialize the simple key stack.
+	parser.simple_keys = append(parser.simple_keys, yaml_simple_key_t{})
+
+	// A simple key is allowed at the beginning of the stream.
+	parser.simple_key_allowed = true
+
+	// We have started.
+	parser.stream_start_produced = true
+
+	// Create the STREAM-START token and append it to the queue.
+	token := yaml_token_t{
+		typ:        yaml_STREAM_START_TOKEN,
+		start_mark: parser.mark,
+		end_mark:   parser.mark,
+		encoding:   parser.encoding,
+	}
+	yaml_insert_token(parser, -1, &token)
+	return true
+}
+
+// Produce the STREAM-END token and shut down the scanner.
+func yaml_parser_fetch_stream_end(parser *yaml_parser_t) bool {
+
+	// Force new line.
+	if parser.mark.column != 0 {
+		parser.mark.column = 0
+		parser.mark.line++
+	}
+
+	// Reset the indentation level.
+	if !yaml_parser_unroll_indent(parser, -1) {
+		return false
+	}
+
+	// Reset simple keys.
+	if !yaml_parser_remove_simple_key(parser) {
+		return false
+	}
+
+	parser.simple_key_allowed = false
+
+	// Create the STREAM-END token and append it to the queue.
+	token := yaml_token_t{
+		typ:        yaml_STREAM_END_TOKEN,
+		start_mark: parser.mark,
+		end_mark:   parser.mark,
+	}
+	yaml_insert_token(parser, -1, &token)
+	return true
+}
+
+// Produce a VERSION-DIRECTIVE or TAG-DIRECTIVE token.
+func yaml_parser_fetch_directive(parser *yaml_parser_t) bool {
+	// Reset the indentation level.
