@@ -819,4 +819,97 @@ func yaml_parser_fetch_next_token(parser *yaml_parser_t) bool {
 		parser.buffer[parser.buffer_pos] == ',' || parser.buffer[parser.buffer_pos] == '[' ||
 		parser.buffer[parser.buffer_pos] == ']' || parser.buffer[parser.buffer_pos] == '{' ||
 		parser.buffer[parser.buffer_pos] == '}' || parser.buffer[parser.buffer_pos] == '#' ||
-		parser.buffer[parser.buffer_pos] == '&' || parser.buff
+		parser.buffer[parser.buffer_pos] == '&' || parser.buffer[parser.buffer_pos] == '*' ||
+		parser.buffer[parser.buffer_pos] == '!' || parser.buffer[parser.buffer_pos] == '|' ||
+		parser.buffer[parser.buffer_pos] == '>' || parser.buffer[parser.buffer_pos] == '\'' ||
+		parser.buffer[parser.buffer_pos] == '"' || parser.buffer[parser.buffer_pos] == '%' ||
+		parser.buffer[parser.buffer_pos] == '@' || parser.buffer[parser.buffer_pos] == '`') ||
+		(parser.buffer[parser.buffer_pos] == '-' && !is_blank(parser.buffer, parser.buffer_pos+1)) ||
+		(parser.flow_level == 0 &&
+			(parser.buffer[parser.buffer_pos] == '?' || parser.buffer[parser.buffer_pos] == ':') &&
+			!is_blankz(parser.buffer, parser.buffer_pos+1)) {
+		return yaml_parser_fetch_plain_scalar(parser)
+	}
+
+	// If we don't determine the token type so far, it is an error.
+	return yaml_parser_set_scanner_error(parser,
+		"while scanning for the next token", parser.mark,
+		"found character that cannot start any token")
+}
+
+// Check the list of potential simple keys and remove the positions that
+// cannot contain simple keys anymore.
+func yaml_parser_stale_simple_keys(parser *yaml_parser_t) bool {
+	// Check for a potential simple key for each flow level.
+	for i := range parser.simple_keys {
+		simple_key := &parser.simple_keys[i]
+
+		// The specification requires that a simple key
+		//
+		//  - is limited to a single line,
+		//  - is shorter than 1024 characters.
+		if simple_key.possible && (simple_key.mark.line < parser.mark.line || simple_key.mark.index+1024 < parser.mark.index) {
+
+			// Check if the potential simple key to be removed is required.
+			if simple_key.required {
+				return yaml_parser_set_scanner_error(parser,
+					"while scanning a simple key", simple_key.mark,
+					"could not find expected ':'")
+			}
+			simple_key.possible = false
+		}
+	}
+	return true
+}
+
+// Check if a simple key may start at the current position and add it if
+// needed.
+func yaml_parser_save_simple_key(parser *yaml_parser_t) bool {
+	// A simple key is required at the current position if the scanner is in
+	// the block context and the current column coincides with the indentation
+	// level.
+
+	required := parser.flow_level == 0 && parser.indent == parser.mark.column
+
+	//
+	// If the current position may start a simple key, save it.
+	//
+	if parser.simple_key_allowed {
+		simple_key := yaml_simple_key_t{
+			possible:     true,
+			required:     required,
+			token_number: parser.tokens_parsed + (len(parser.tokens) - parser.tokens_head),
+		}
+		simple_key.mark = parser.mark
+
+		if !yaml_parser_remove_simple_key(parser) {
+			return false
+		}
+		parser.simple_keys[len(parser.simple_keys)-1] = simple_key
+	}
+	return true
+}
+
+// Remove a potential simple key at the current flow level.
+func yaml_parser_remove_simple_key(parser *yaml_parser_t) bool {
+	i := len(parser.simple_keys) - 1
+	if parser.simple_keys[i].possible {
+		// If the key is required, it is an error.
+		if parser.simple_keys[i].required {
+			return yaml_parser_set_scanner_error(parser,
+				"while scanning a simple key", parser.simple_keys[i].mark,
+				"could not find expected ':'")
+		}
+	}
+	// Remove the key from the stack.
+	parser.simple_keys[i].possible = false
+	return true
+}
+
+// Increase the flow level and resize the simple key list if needed.
+func yaml_parser_increase_flow_level(parser *yaml_parser_t) bool {
+	// Reset the simple key on the next level.
+	parser.simple_keys = append(parser.simple_keys, yaml_simple_key_t{})
+
+	// Increase the flow level.
+	p
