@@ -1183,4 +1183,120 @@ func yaml_parser_fetch_flow_entry(parser *yaml_parser_t) bool {
 	return true
 }
 
-// Prod
+// Produce the BLOCK-ENTRY token.
+func yaml_parser_fetch_block_entry(parser *yaml_parser_t) bool {
+	// Check if the scanner is in the block context.
+	if parser.flow_level == 0 {
+		// Check if we are allowed to start a new entry.
+		if !parser.simple_key_allowed {
+			return yaml_parser_set_scanner_error(parser, "", parser.mark,
+				"block sequence entries are not allowed in this context")
+		}
+		// Add the BLOCK-SEQUENCE-START token if needed.
+		if !yaml_parser_roll_indent(parser, parser.mark.column, -1, yaml_BLOCK_SEQUENCE_START_TOKEN, parser.mark) {
+			return false
+		}
+	} else {
+		// It is an error for the '-' indicator to occur in the flow context,
+		// but we let the Parser detect and report about it because the Parser
+		// is able to point to the context.
+	}
+
+	// Reset any potential simple keys on the current flow level.
+	if !yaml_parser_remove_simple_key(parser) {
+		return false
+	}
+
+	// Simple keys are allowed after '-'.
+	parser.simple_key_allowed = true
+
+	// Consume the token.
+	start_mark := parser.mark
+	skip(parser)
+	end_mark := parser.mark
+
+	// Create the BLOCK-ENTRY token and append it to the queue.
+	token := yaml_token_t{
+		typ:        yaml_BLOCK_ENTRY_TOKEN,
+		start_mark: start_mark,
+		end_mark:   end_mark,
+	}
+	yaml_insert_token(parser, -1, &token)
+	return true
+}
+
+// Produce the KEY token.
+func yaml_parser_fetch_key(parser *yaml_parser_t) bool {
+
+	// In the block context, additional checks are required.
+	if parser.flow_level == 0 {
+		// Check if we are allowed to start a new key (not nessesary simple).
+		if !parser.simple_key_allowed {
+			return yaml_parser_set_scanner_error(parser, "", parser.mark,
+				"mapping keys are not allowed in this context")
+		}
+		// Add the BLOCK-MAPPING-START token if needed.
+		if !yaml_parser_roll_indent(parser, parser.mark.column, -1, yaml_BLOCK_MAPPING_START_TOKEN, parser.mark) {
+			return false
+		}
+	}
+
+	// Reset any potential simple keys on the current flow level.
+	if !yaml_parser_remove_simple_key(parser) {
+		return false
+	}
+
+	// Simple keys are allowed after '?' in the block context.
+	parser.simple_key_allowed = parser.flow_level == 0
+
+	// Consume the token.
+	start_mark := parser.mark
+	skip(parser)
+	end_mark := parser.mark
+
+	// Create the KEY token and append it to the queue.
+	token := yaml_token_t{
+		typ:        yaml_KEY_TOKEN,
+		start_mark: start_mark,
+		end_mark:   end_mark,
+	}
+	yaml_insert_token(parser, -1, &token)
+	return true
+}
+
+// Produce the VALUE token.
+func yaml_parser_fetch_value(parser *yaml_parser_t) bool {
+
+	simple_key := &parser.simple_keys[len(parser.simple_keys)-1]
+
+	// Have we found a simple key?
+	if simple_key.possible {
+		// Create the KEY token and insert it into the queue.
+		token := yaml_token_t{
+			typ:        yaml_KEY_TOKEN,
+			start_mark: simple_key.mark,
+			end_mark:   simple_key.mark,
+		}
+		yaml_insert_token(parser, simple_key.token_number-parser.tokens_parsed, &token)
+
+		// In the block context, we may need to add the BLOCK-MAPPING-START token.
+		if !yaml_parser_roll_indent(parser, simple_key.mark.column,
+			simple_key.token_number,
+			yaml_BLOCK_MAPPING_START_TOKEN, simple_key.mark) {
+			return false
+		}
+
+		// Remove the simple key.
+		simple_key.possible = false
+
+		// A simple key cannot follow another simple key.
+		parser.simple_key_allowed = false
+
+	} else {
+		// The ':' indicator follows a complex key.
+
+		// In the block context, extra checks are required.
+		if parser.flow_level == 0 {
+
+			// Check if we are allowed to start a complex value.
+			if !parser.simple_key_allowed {
