@@ -1040,3 +1040,147 @@ func yaml_parser_fetch_stream_end(parser *yaml_parser_t) bool {
 // Produce a VERSION-DIRECTIVE or TAG-DIRECTIVE token.
 func yaml_parser_fetch_directive(parser *yaml_parser_t) bool {
 	// Reset the indentation level.
+	if !yaml_parser_unroll_indent(parser, -1) {
+		return false
+	}
+
+	// Reset simple keys.
+	if !yaml_parser_remove_simple_key(parser) {
+		return false
+	}
+
+	parser.simple_key_allowed = false
+
+	// Create the YAML-DIRECTIVE or TAG-DIRECTIVE token.
+	token := yaml_token_t{}
+	if !yaml_parser_scan_directive(parser, &token) {
+		return false
+	}
+	// Append the token to the queue.
+	yaml_insert_token(parser, -1, &token)
+	return true
+}
+
+// Produce the DOCUMENT-START or DOCUMENT-END token.
+func yaml_parser_fetch_document_indicator(parser *yaml_parser_t, typ yaml_token_type_t) bool {
+	// Reset the indentation level.
+	if !yaml_parser_unroll_indent(parser, -1) {
+		return false
+	}
+
+	// Reset simple keys.
+	if !yaml_parser_remove_simple_key(parser) {
+		return false
+	}
+
+	parser.simple_key_allowed = false
+
+	// Consume the token.
+	start_mark := parser.mark
+
+	skip(parser)
+	skip(parser)
+	skip(parser)
+
+	end_mark := parser.mark
+
+	// Create the DOCUMENT-START or DOCUMENT-END token.
+	token := yaml_token_t{
+		typ:        typ,
+		start_mark: start_mark,
+		end_mark:   end_mark,
+	}
+	// Append the token to the queue.
+	yaml_insert_token(parser, -1, &token)
+	return true
+}
+
+// Produce the FLOW-SEQUENCE-START or FLOW-MAPPING-START token.
+func yaml_parser_fetch_flow_collection_start(parser *yaml_parser_t, typ yaml_token_type_t) bool {
+	// The indicators '[' and '{' may start a simple key.
+	if !yaml_parser_save_simple_key(parser) {
+		return false
+	}
+
+	// Increase the flow level.
+	if !yaml_parser_increase_flow_level(parser) {
+		return false
+	}
+
+	// A simple key may follow the indicators '[' and '{'.
+	parser.simple_key_allowed = true
+
+	// Consume the token.
+	start_mark := parser.mark
+	skip(parser)
+	end_mark := parser.mark
+
+	// Create the FLOW-SEQUENCE-START of FLOW-MAPPING-START token.
+	token := yaml_token_t{
+		typ:        typ,
+		start_mark: start_mark,
+		end_mark:   end_mark,
+	}
+	// Append the token to the queue.
+	yaml_insert_token(parser, -1, &token)
+	return true
+}
+
+// Produce the FLOW-SEQUENCE-END or FLOW-MAPPING-END token.
+func yaml_parser_fetch_flow_collection_end(parser *yaml_parser_t, typ yaml_token_type_t) bool {
+	// Reset any potential simple key on the current flow level.
+	if !yaml_parser_remove_simple_key(parser) {
+		return false
+	}
+
+	// Decrease the flow level.
+	if !yaml_parser_decrease_flow_level(parser) {
+		return false
+	}
+
+	// No simple keys after the indicators ']' and '}'.
+	parser.simple_key_allowed = false
+
+	// Consume the token.
+
+	start_mark := parser.mark
+	skip(parser)
+	end_mark := parser.mark
+
+	// Create the FLOW-SEQUENCE-END of FLOW-MAPPING-END token.
+	token := yaml_token_t{
+		typ:        typ,
+		start_mark: start_mark,
+		end_mark:   end_mark,
+	}
+	// Append the token to the queue.
+	yaml_insert_token(parser, -1, &token)
+	return true
+}
+
+// Produce the FLOW-ENTRY token.
+func yaml_parser_fetch_flow_entry(parser *yaml_parser_t) bool {
+	// Reset any potential simple keys on the current flow level.
+	if !yaml_parser_remove_simple_key(parser) {
+		return false
+	}
+
+	// Simple keys are allowed after ','.
+	parser.simple_key_allowed = true
+
+	// Consume the token.
+	start_mark := parser.mark
+	skip(parser)
+	end_mark := parser.mark
+
+	// Create the FLOW-ENTRY token and append it to the queue.
+	token := yaml_token_t{
+		typ:        yaml_FLOW_ENTRY_TOKEN,
+		start_mark: start_mark,
+		end_mark:   end_mark,
+	}
+	yaml_insert_token(parser, -1, &token)
+	return true
+}
+
+// Prod
