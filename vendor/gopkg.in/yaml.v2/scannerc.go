@@ -1300,3 +1300,128 @@ func yaml_parser_fetch_value(parser *yaml_parser_t) bool {
 
 			// Check if we are allowed to start a complex value.
 			if !parser.simple_key_allowed {
+				return yaml_parser_set_scanner_error(parser, "", parser.mark,
+					"mapping values are not allowed in this context")
+			}
+
+			// Add the BLOCK-MAPPING-START token if needed.
+			if !yaml_parser_roll_indent(parser, parser.mark.column, -1, yaml_BLOCK_MAPPING_START_TOKEN, parser.mark) {
+				return false
+			}
+		}
+
+		// Simple keys after ':' are allowed in the block context.
+		parser.simple_key_allowed = parser.flow_level == 0
+	}
+
+	// Consume the token.
+	start_mark := parser.mark
+	skip(parser)
+	end_mark := parser.mark
+
+	// Create the VALUE token and append it to the queue.
+	token := yaml_token_t{
+		typ:        yaml_VALUE_TOKEN,
+		start_mark: start_mark,
+		end_mark:   end_mark,
+	}
+	yaml_insert_token(parser, -1, &token)
+	return true
+}
+
+// Produce the ALIAS or ANCHOR token.
+func yaml_parser_fetch_anchor(parser *yaml_parser_t, typ yaml_token_type_t) bool {
+	// An anchor or an alias could be a simple key.
+	if !yaml_parser_save_simple_key(parser) {
+		return false
+	}
+
+	// A simple key cannot follow an anchor or an alias.
+	parser.simple_key_allowed = false
+
+	// Create the ALIAS or ANCHOR token and append it to the queue.
+	var token yaml_token_t
+	if !yaml_parser_scan_anchor(parser, &token, typ) {
+		return false
+	}
+	yaml_insert_token(parser, -1, &token)
+	return true
+}
+
+// Produce the TAG token.
+func yaml_parser_fetch_tag(parser *yaml_parser_t) bool {
+	// A tag could be a simple key.
+	if !yaml_parser_save_simple_key(parser) {
+		return false
+	}
+
+	// A simple key cannot follow a tag.
+	parser.simple_key_allowed = false
+
+	// Create the TAG token and append it to the queue.
+	var token yaml_token_t
+	if !yaml_parser_scan_tag(parser, &token) {
+		return false
+	}
+	yaml_insert_token(parser, -1, &token)
+	return true
+}
+
+// Produce the SCALAR(...,literal) or SCALAR(...,folded) tokens.
+func yaml_parser_fetch_block_scalar(parser *yaml_parser_t, literal bool) bool {
+	// Remove any potential simple keys.
+	if !yaml_parser_remove_simple_key(parser) {
+		return false
+	}
+
+	// A simple key may follow a block scalar.
+	parser.simple_key_allowed = true
+
+	// Create the SCALAR token and append it to the queue.
+	var token yaml_token_t
+	if !yaml_parser_scan_block_scalar(parser, &token, literal) {
+		return false
+	}
+	yaml_insert_token(parser, -1, &token)
+	return true
+}
+
+// Produce the SCALAR(...,single-quoted) or SCALAR(...,double-quoted) tokens.
+func yaml_parser_fetch_flow_scalar(parser *yaml_parser_t, single bool) bool {
+	// A plain scalar could be a simple key.
+	if !yaml_parser_save_simple_key(parser) {
+		return false
+	}
+
+	// A simple key cannot follow a flow scalar.
+	parser.simple_key_allowed = false
+
+	// Create the SCALAR token and append it to the queue.
+	var token yaml_token_t
+	if !yaml_parser_scan_flow_scalar(parser, &token, single) {
+		return false
+	}
+	yaml_insert_token(parser, -1, &token)
+	return true
+}
+
+// Produce the SCALAR(...,plain) token.
+func yaml_parser_fetch_plain_scalar(parser *yaml_parser_t) bool {
+	// A plain scalar could be a simple key.
+	if !yaml_parser_save_simple_key(parser) {
+		return false
+	}
+
+	// A simple key cannot follow a flow scalar.
+	parser.simple_key_allowed = false
+
+	// Create the SCALAR token and append it to the queue.
+	var token yaml_token_t
+	if !yaml_parser_scan_plain_scalar(parser, &token) {
+		return false
+	}
+	yaml_insert_token(parser, -1, &token)
+	return true
+}
+
+// Eat 
