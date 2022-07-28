@@ -1424,4 +1424,131 @@ func yaml_parser_fetch_plain_scalar(parser *yaml_parser_t) bool {
 	return true
 }
 
-// Eat 
+// Eat whitespaces and comments until the next token is found.
+func yaml_parser_scan_to_next_token(parser *yaml_parser_t) bool {
+
+	// Until the next token is not found.
+	for {
+		// Allow the BOM mark to start a line.
+		if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+			return false
+		}
+		if parser.mark.column == 0 && is_bom(parser.buffer, parser.buffer_pos) {
+			skip(parser)
+		}
+
+		// Eat whitespaces.
+		// Tabs are allowed:
+		//  - in the flow context
+		//  - in the block context, but not at the beginning of the line or
+		//  after '-', '?', or ':' (complex value).
+		if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+			return false
+		}
+
+		for parser.buffer[parser.buffer_pos] == ' ' || ((parser.flow_level > 0 || !parser.simple_key_allowed) && parser.buffer[parser.buffer_pos] == '\t') {
+			skip(parser)
+			if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+				return false
+			}
+		}
+
+		// Eat a comment until a line break.
+		if parser.buffer[parser.buffer_pos] == '#' {
+			for !is_breakz(parser.buffer, parser.buffer_pos) {
+				skip(parser)
+				if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+					return false
+				}
+			}
+		}
+
+		// If it is a line break, eat it.
+		if is_break(parser.buffer, parser.buffer_pos) {
+			if parser.unread < 2 && !yaml_parser_update_buffer(parser, 2) {
+				return false
+			}
+			skip_line(parser)
+
+			// In the block context, a new line may start a simple key.
+			if parser.flow_level == 0 {
+				parser.simple_key_allowed = true
+			}
+		} else {
+			break // We have found a token.
+		}
+	}
+
+	return true
+}
+
+// Scan a YAML-DIRECTIVE or TAG-DIRECTIVE token.
+//
+// Scope:
+//      %YAML    1.1    # a comment \n
+//      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+//      %TAG    !yaml!  tag:yaml.org,2002:  \n
+//      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+//
+func yaml_parser_scan_directive(parser *yaml_parser_t, token *yaml_token_t) bool {
+	// Eat '%'.
+	start_mark := parser.mark
+	skip(parser)
+
+	// Scan the directive name.
+	var name []byte
+	if !yaml_parser_scan_directive_name(parser, start_mark, &name) {
+		return false
+	}
+
+	// Is it a YAML directive?
+	if bytes.Equal(name, []byte("YAML")) {
+		// Scan the VERSION directive value.
+		var major, minor int8
+		if !yaml_parser_scan_version_directive_value(parser, start_mark, &major, &minor) {
+			return false
+		}
+		end_mark := parser.mark
+
+		// Create a VERSION-DIRECTIVE token.
+		*token = yaml_token_t{
+			typ:        yaml_VERSION_DIRECTIVE_TOKEN,
+			start_mark: start_mark,
+			end_mark:   end_mark,
+			major:      major,
+			minor:      minor,
+		}
+
+		// Is it a TAG directive?
+	} else if bytes.Equal(name, []byte("TAG")) {
+		// Scan the TAG directive value.
+		var handle, prefix []byte
+		if !yaml_parser_scan_tag_directive_value(parser, start_mark, &handle, &prefix) {
+			return false
+		}
+		end_mark := parser.mark
+
+		// Create a TAG-DIRECTIVE token.
+		*token = yaml_token_t{
+			typ:        yaml_TAG_DIRECTIVE_TOKEN,
+			start_mark: start_mark,
+			end_mark:   end_mark,
+			value:      handle,
+			prefix:     prefix,
+		}
+
+		// Unknown directive.
+	} else {
+		yaml_parser_set_scanner_error(parser, "while scanning a directive",
+			start_mark, "found unknown directive name")
+		return false
+	}
+
+	// Eat the rest of the line including any comments.
+	if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+		return false
+	}
+
+	for is_blank(parser.buffer, parser.buffer_pos) {
+		skip(parser)
+		if parser.unread < 1 && !yaml_parser_update
