@@ -1551,4 +1551,133 @@ func yaml_parser_scan_directive(parser *yaml_parser_t, token *yaml_token_t) bool
 
 	for is_blank(parser.buffer, parser.buffer_pos) {
 		skip(parser)
-		if parser.unread < 1 && !yaml_parser_update
+		if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+			return false
+		}
+	}
+
+	if parser.buffer[parser.buffer_pos] == '#' {
+		for !is_breakz(parser.buffer, parser.buffer_pos) {
+			skip(parser)
+			if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+				return false
+			}
+		}
+	}
+
+	// Check if we are at the end of the line.
+	if !is_breakz(parser.buffer, parser.buffer_pos) {
+		yaml_parser_set_scanner_error(parser, "while scanning a directive",
+			start_mark, "did not find expected comment or line break")
+		return false
+	}
+
+	// Eat a line break.
+	if is_break(parser.buffer, parser.buffer_pos) {
+		if parser.unread < 2 && !yaml_parser_update_buffer(parser, 2) {
+			return false
+		}
+		skip_line(parser)
+	}
+
+	return true
+}
+
+// Scan the directive name.
+//
+// Scope:
+//      %YAML   1.1     # a comment \n
+//       ^^^^
+//      %TAG    !yaml!  tag:yaml.org,2002:  \n
+//       ^^^
+//
+func yaml_parser_scan_directive_name(parser *yaml_parser_t, start_mark yaml_mark_t, name *[]byte) bool {
+	// Consume the directive name.
+	if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+		return false
+	}
+
+	var s []byte
+	for is_alpha(parser.buffer, parser.buffer_pos) {
+		s = read(parser, s)
+		if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+			return false
+		}
+	}
+
+	// Check if the name is empty.
+	if len(s) == 0 {
+		yaml_parser_set_scanner_error(parser, "while scanning a directive",
+			start_mark, "could not find expected directive name")
+		return false
+	}
+
+	// Check for an blank character after the name.
+	if !is_blankz(parser.buffer, parser.buffer_pos) {
+		yaml_parser_set_scanner_error(parser, "while scanning a directive",
+			start_mark, "found unexpected non-alphabetical character")
+		return false
+	}
+	*name = s
+	return true
+}
+
+// Scan the value of VERSION-DIRECTIVE.
+//
+// Scope:
+//      %YAML   1.1     # a comment \n
+//           ^^^^^^
+func yaml_parser_scan_version_directive_value(parser *yaml_parser_t, start_mark yaml_mark_t, major, minor *int8) bool {
+	// Eat whitespaces.
+	if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+		return false
+	}
+	for is_blank(parser.buffer, parser.buffer_pos) {
+		skip(parser)
+		if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+			return false
+		}
+	}
+
+	// Consume the major version number.
+	if !yaml_parser_scan_version_directive_number(parser, start_mark, major) {
+		return false
+	}
+
+	// Eat '.'.
+	if parser.buffer[parser.buffer_pos] != '.' {
+		return yaml_parser_set_scanner_error(parser, "while scanning a %YAML directive",
+			start_mark, "did not find expected digit or '.' character")
+	}
+
+	skip(parser)
+
+	// Consume the minor version number.
+	if !yaml_parser_scan_version_directive_number(parser, start_mark, minor) {
+		return false
+	}
+	return true
+}
+
+const max_number_length = 2
+
+// Scan the version number of VERSION-DIRECTIVE.
+//
+// Scope:
+//      %YAML   1.1     # a comment \n
+//              ^
+//      %YAML   1.1     # a comment \n
+//                ^
+func yaml_parser_scan_version_directive_number(parser *yaml_parser_t, start_mark yaml_mark_t, number *int8) bool {
+
+	// Repeat while the next character is digit.
+	if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+		return false
+	}
+	var value, length int8
+	for is_digit(parser.buffer, parser.buffer_pos) {
+		// Check if the number is too long.
+		length++
+		if length > max_number_length {
+			return yaml_parser_set_scanner_error(parser, "while scanning a %YAML directive",
+				start_mark, "found
