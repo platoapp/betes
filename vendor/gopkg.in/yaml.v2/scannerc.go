@@ -1680,4 +1680,125 @@ func yaml_parser_scan_version_directive_number(parser *yaml_parser_t, start_mark
 		length++
 		if length > max_number_length {
 			return yaml_parser_set_scanner_error(parser, "while scanning a %YAML directive",
-				start_mark, "found
+				start_mark, "found extremely long version number")
+		}
+		value = value*10 + int8(as_digit(parser.buffer, parser.buffer_pos))
+		skip(parser)
+		if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+			return false
+		}
+	}
+
+	// Check if the number was present.
+	if length == 0 {
+		return yaml_parser_set_scanner_error(parser, "while scanning a %YAML directive",
+			start_mark, "did not find expected version number")
+	}
+	*number = value
+	return true
+}
+
+// Scan the value of a TAG-DIRECTIVE token.
+//
+// Scope:
+//      %TAG    !yaml!  tag:yaml.org,2002:  \n
+//          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+//
+func yaml_parser_scan_tag_directive_value(parser *yaml_parser_t, start_mark yaml_mark_t, handle, prefix *[]byte) bool {
+	var handle_value, prefix_value []byte
+
+	// Eat whitespaces.
+	if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+		return false
+	}
+
+	for is_blank(parser.buffer, parser.buffer_pos) {
+		skip(parser)
+		if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+			return false
+		}
+	}
+
+	// Scan a handle.
+	if !yaml_parser_scan_tag_handle(parser, true, start_mark, &handle_value) {
+		return false
+	}
+
+	// Expect a whitespace.
+	if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+		return false
+	}
+	if !is_blank(parser.buffer, parser.buffer_pos) {
+		yaml_parser_set_scanner_error(parser, "while scanning a %TAG directive",
+			start_mark, "did not find expected whitespace")
+		return false
+	}
+
+	// Eat whitespaces.
+	for is_blank(parser.buffer, parser.buffer_pos) {
+		skip(parser)
+		if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+			return false
+		}
+	}
+
+	// Scan a prefix.
+	if !yaml_parser_scan_tag_uri(parser, true, nil, start_mark, &prefix_value) {
+		return false
+	}
+
+	// Expect a whitespace or line break.
+	if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+		return false
+	}
+	if !is_blankz(parser.buffer, parser.buffer_pos) {
+		yaml_parser_set_scanner_error(parser, "while scanning a %TAG directive",
+			start_mark, "did not find expected whitespace or line break")
+		return false
+	}
+
+	*handle = handle_value
+	*prefix = prefix_value
+	return true
+}
+
+func yaml_parser_scan_anchor(parser *yaml_parser_t, token *yaml_token_t, typ yaml_token_type_t) bool {
+	var s []byte
+
+	// Eat the indicator character.
+	start_mark := parser.mark
+	skip(parser)
+
+	// Consume the value.
+	if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+		return false
+	}
+
+	for is_alpha(parser.buffer, parser.buffer_pos) {
+		s = read(parser, s)
+		if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+			return false
+		}
+	}
+
+	end_mark := parser.mark
+
+	/*
+	 * Check if length of the anchor is greater than 0 and it is followed by
+	 * a whitespace character or one of the indicators:
+	 *
+	 *      '?', ':', ',', ']', '}', '%', '@', '`'.
+	 */
+
+	if len(s) == 0 ||
+		!(is_blankz(parser.buffer, parser.buffer_pos) || parser.buffer[parser.buffer_pos] == '?' ||
+			parser.buffer[parser.buffer_pos] == ':' || parser.buffer[parser.buffer_pos] == ',' ||
+			parser.buffer[parser.buffer_pos] == ']' || parser.buffer[parser.buffer_pos] == '}' ||
+			parser.buffer[parser.buffer_pos] == '%' || parser.buffer[parser.buffer_pos] == '@' ||
+			parser.buffer[parser.buffer_pos] == '`') {
+		context := "while scanning an alias"
+		if typ == yaml_ANCHOR_TOKEN {
+			context = "while scanning an anchor"
+		}
+		yaml_parser_set_scanner_error(parser, context, start_mark,
+			"did not find expected alphabetic or 
