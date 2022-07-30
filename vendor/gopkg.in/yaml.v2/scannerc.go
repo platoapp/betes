@@ -2164,4 +2164,125 @@ func yaml_parser_scan_block_scalar(parser *yaml_parser_t, token *yaml_token_t, l
 
 	// Scan the leading line breaks and determine the indentation level if needed.
 	var s, leading_break, trailing_breaks []byte
-	if !yaml_parser_scan_block_scalar_breaks(parser, &
+	if !yaml_parser_scan_block_scalar_breaks(parser, &indent, &trailing_breaks, start_mark, &end_mark) {
+		return false
+	}
+
+	// Scan the block scalar content.
+	if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+		return false
+	}
+	var leading_blank, trailing_blank bool
+	for parser.mark.column == indent && !is_z(parser.buffer, parser.buffer_pos) {
+		// We are at the beginning of a non-empty line.
+
+		// Is it a trailing whitespace?
+		trailing_blank = is_blank(parser.buffer, parser.buffer_pos)
+
+		// Check if we need to fold the leading line break.
+		if !literal && !leading_blank && !trailing_blank && len(leading_break) > 0 && leading_break[0] == '\n' {
+			// Do we need to join the lines by space?
+			if len(trailing_breaks) == 0 {
+				s = append(s, ' ')
+			}
+		} else {
+			s = append(s, leading_break...)
+		}
+		leading_break = leading_break[:0]
+
+		// Append the remaining line breaks.
+		s = append(s, trailing_breaks...)
+		trailing_breaks = trailing_breaks[:0]
+
+		// Is it a leading whitespace?
+		leading_blank = is_blank(parser.buffer, parser.buffer_pos)
+
+		// Consume the current line.
+		for !is_breakz(parser.buffer, parser.buffer_pos) {
+			s = read(parser, s)
+			if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+				return false
+			}
+		}
+
+		// Consume the line break.
+		if parser.unread < 2 && !yaml_parser_update_buffer(parser, 2) {
+			return false
+		}
+
+		leading_break = read_line(parser, leading_break)
+
+		// Eat the following indentation spaces and line breaks.
+		if !yaml_parser_scan_block_scalar_breaks(parser, &indent, &trailing_breaks, start_mark, &end_mark) {
+			return false
+		}
+	}
+
+	// Chomp the tail.
+	if chomping != -1 {
+		s = append(s, leading_break...)
+	}
+	if chomping == 1 {
+		s = append(s, trailing_breaks...)
+	}
+
+	// Create a token.
+	*token = yaml_token_t{
+		typ:        yaml_SCALAR_TOKEN,
+		start_mark: start_mark,
+		end_mark:   end_mark,
+		value:      s,
+		style:      yaml_LITERAL_SCALAR_STYLE,
+	}
+	if !literal {
+		token.style = yaml_FOLDED_SCALAR_STYLE
+	}
+	return true
+}
+
+// Scan indentation spaces and line breaks for a block scalar.  Determine the
+// indentation level if needed.
+func yaml_parser_scan_block_scalar_breaks(parser *yaml_parser_t, indent *int, breaks *[]byte, start_mark yaml_mark_t, end_mark *yaml_mark_t) bool {
+	*end_mark = parser.mark
+
+	// Eat the indentation spaces and line breaks.
+	max_indent := 0
+	for {
+		// Eat the indentation spaces.
+		if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+			return false
+		}
+		for (*indent == 0 || parser.mark.column < *indent) && is_space(parser.buffer, parser.buffer_pos) {
+			skip(parser)
+			if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+				return false
+			}
+		}
+		if parser.mark.column > max_indent {
+			max_indent = parser.mark.column
+		}
+
+		// Check for a tab character messing the indentation.
+		if (*indent == 0 || parser.mark.column < *indent) && is_tab(parser.buffer, parser.buffer_pos) {
+			return yaml_parser_set_scanner_error(parser, "while scanning a block scalar",
+				start_mark, "found a tab character where an indentation space is expected")
+		}
+
+		// Have we found a non-empty line?
+		if !is_break(parser.buffer, parser.buffer_pos) {
+			break
+		}
+
+		// Consume the line break.
+		if parser.unread < 2 && !yaml_parser_update_buffer(parser, 2) {
+			return false
+		}
+		// [Go] Should really be returning breaks instead.
+		*breaks = read_line(parser, *breaks)
+		*end_mark = parser.mark
+	}
+
+	// Determine the indentation level if needed.
+	if *indent == 0 {
+		*indent = max_indent
+		if *indent < pars
