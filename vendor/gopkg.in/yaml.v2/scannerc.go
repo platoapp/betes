@@ -1801,4 +1801,141 @@ func yaml_parser_scan_anchor(parser *yaml_parser_t, token *yaml_token_t, typ yam
 			context = "while scanning an anchor"
 		}
 		yaml_parser_set_scanner_error(parser, context, start_mark,
-			"did not find expected alphabetic or 
+			"did not find expected alphabetic or numeric character")
+		return false
+	}
+
+	// Create a token.
+	*token = yaml_token_t{
+		typ:        typ,
+		start_mark: start_mark,
+		end_mark:   end_mark,
+		value:      s,
+	}
+
+	return true
+}
+
+/*
+ * Scan a TAG token.
+ */
+
+func yaml_parser_scan_tag(parser *yaml_parser_t, token *yaml_token_t) bool {
+	var handle, suffix []byte
+
+	start_mark := parser.mark
+
+	// Check if the tag is in the canonical form.
+	if parser.unread < 2 && !yaml_parser_update_buffer(parser, 2) {
+		return false
+	}
+
+	if parser.buffer[parser.buffer_pos+1] == '<' {
+		// Keep the handle as ''
+
+		// Eat '!<'
+		skip(parser)
+		skip(parser)
+
+		// Consume the tag value.
+		if !yaml_parser_scan_tag_uri(parser, false, nil, start_mark, &suffix) {
+			return false
+		}
+
+		// Check for '>' and eat it.
+		if parser.buffer[parser.buffer_pos] != '>' {
+			yaml_parser_set_scanner_error(parser, "while scanning a tag",
+				start_mark, "did not find the expected '>'")
+			return false
+		}
+
+		skip(parser)
+	} else {
+		// The tag has either the '!suffix' or the '!handle!suffix' form.
+
+		// First, try to scan a handle.
+		if !yaml_parser_scan_tag_handle(parser, false, start_mark, &handle) {
+			return false
+		}
+
+		// Check if it is, indeed, handle.
+		if handle[0] == '!' && len(handle) > 1 && handle[len(handle)-1] == '!' {
+			// Scan the suffix now.
+			if !yaml_parser_scan_tag_uri(parser, false, nil, start_mark, &suffix) {
+				return false
+			}
+		} else {
+			// It wasn't a handle after all.  Scan the rest of the tag.
+			if !yaml_parser_scan_tag_uri(parser, false, handle, start_mark, &suffix) {
+				return false
+			}
+
+			// Set the handle to '!'.
+			handle = []byte{'!'}
+
+			// A special case: the '!' tag.  Set the handle to '' and the
+			// suffix to '!'.
+			if len(suffix) == 0 {
+				handle, suffix = suffix, handle
+			}
+		}
+	}
+
+	// Check the character which ends the tag.
+	if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+		return false
+	}
+	if !is_blankz(parser.buffer, parser.buffer_pos) {
+		yaml_parser_set_scanner_error(parser, "while scanning a tag",
+			start_mark, "did not find expected whitespace or line break")
+		return false
+	}
+
+	end_mark := parser.mark
+
+	// Create a token.
+	*token = yaml_token_t{
+		typ:        yaml_TAG_TOKEN,
+		start_mark: start_mark,
+		end_mark:   end_mark,
+		value:      handle,
+		suffix:     suffix,
+	}
+	return true
+}
+
+// Scan a tag handle.
+func yaml_parser_scan_tag_handle(parser *yaml_parser_t, directive bool, start_mark yaml_mark_t, handle *[]byte) bool {
+	// Check the initial '!' character.
+	if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+		return false
+	}
+	if parser.buffer[parser.buffer_pos] != '!' {
+		yaml_parser_set_scanner_tag_error(parser, directive,
+			start_mark, "did not find expected '!'")
+		return false
+	}
+
+	var s []byte
+
+	// Copy the '!' character.
+	s = read(parser, s)
+
+	// Copy all subsequent alphabetical and numerical characters.
+	if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+		return false
+	}
+	for is_alpha(parser.buffer, parser.buffer_pos) {
+		s = read(parser, s)
+		if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+			return false
+		}
+	}
+
+	// Check if the trailing character is '!' and copy it.
+	if parser.buffer[parser.buffer_pos] == '!' {
+		s = read(parser, s)
+	} else {
+		// It's either the '!' tag or not really a tag handle.  If it's a %TAG
+		// directive, it's an error.  If it's a tag token, it must be a part of URI.
+		if directive && stri
