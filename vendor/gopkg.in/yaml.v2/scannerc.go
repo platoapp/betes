@@ -2285,4 +2285,127 @@ func yaml_parser_scan_block_scalar_breaks(parser *yaml_parser_t, indent *int, br
 	// Determine the indentation level if needed.
 	if *indent == 0 {
 		*indent = max_indent
-		if *indent < pars
+		if *indent < parser.indent+1 {
+			*indent = parser.indent + 1
+		}
+		if *indent < 1 {
+			*indent = 1
+		}
+	}
+	return true
+}
+
+// Scan a quoted scalar.
+func yaml_parser_scan_flow_scalar(parser *yaml_parser_t, token *yaml_token_t, single bool) bool {
+	// Eat the left quote.
+	start_mark := parser.mark
+	skip(parser)
+
+	// Consume the content of the quoted scalar.
+	var s, leading_break, trailing_breaks, whitespaces []byte
+	for {
+		// Check that there are no document indicators at the beginning of the line.
+		if parser.unread < 4 && !yaml_parser_update_buffer(parser, 4) {
+			return false
+		}
+
+		if parser.mark.column == 0 &&
+			((parser.buffer[parser.buffer_pos+0] == '-' &&
+				parser.buffer[parser.buffer_pos+1] == '-' &&
+				parser.buffer[parser.buffer_pos+2] == '-') ||
+				(parser.buffer[parser.buffer_pos+0] == '.' &&
+					parser.buffer[parser.buffer_pos+1] == '.' &&
+					parser.buffer[parser.buffer_pos+2] == '.')) &&
+			is_blankz(parser.buffer, parser.buffer_pos+3) {
+			yaml_parser_set_scanner_error(parser, "while scanning a quoted scalar",
+				start_mark, "found unexpected document indicator")
+			return false
+		}
+
+		// Check for EOF.
+		if is_z(parser.buffer, parser.buffer_pos) {
+			yaml_parser_set_scanner_error(parser, "while scanning a quoted scalar",
+				start_mark, "found unexpected end of stream")
+			return false
+		}
+
+		// Consume non-blank characters.
+		leading_blanks := false
+		for !is_blankz(parser.buffer, parser.buffer_pos) {
+			if single && parser.buffer[parser.buffer_pos] == '\'' && parser.buffer[parser.buffer_pos+1] == '\'' {
+				// Is is an escaped single quote.
+				s = append(s, '\'')
+				skip(parser)
+				skip(parser)
+
+			} else if single && parser.buffer[parser.buffer_pos] == '\'' {
+				// It is a right single quote.
+				break
+			} else if !single && parser.buffer[parser.buffer_pos] == '"' {
+				// It is a right double quote.
+				break
+
+			} else if !single && parser.buffer[parser.buffer_pos] == '\\' && is_break(parser.buffer, parser.buffer_pos+1) {
+				// It is an escaped line break.
+				if parser.unread < 3 && !yaml_parser_update_buffer(parser, 3) {
+					return false
+				}
+				skip(parser)
+				skip_line(parser)
+				leading_blanks = true
+				break
+
+			} else if !single && parser.buffer[parser.buffer_pos] == '\\' {
+				// It is an escape sequence.
+				code_length := 0
+
+				// Check the escape character.
+				switch parser.buffer[parser.buffer_pos+1] {
+				case '0':
+					s = append(s, 0)
+				case 'a':
+					s = append(s, '\x07')
+				case 'b':
+					s = append(s, '\x08')
+				case 't', '\t':
+					s = append(s, '\x09')
+				case 'n':
+					s = append(s, '\x0A')
+				case 'v':
+					s = append(s, '\x0B')
+				case 'f':
+					s = append(s, '\x0C')
+				case 'r':
+					s = append(s, '\x0D')
+				case 'e':
+					s = append(s, '\x1B')
+				case ' ':
+					s = append(s, '\x20')
+				case '"':
+					s = append(s, '"')
+				case '\'':
+					s = append(s, '\'')
+				case '\\':
+					s = append(s, '\\')
+				case 'N': // NEL (#x85)
+					s = append(s, '\xC2')
+					s = append(s, '\x85')
+				case '_': // #xA0
+					s = append(s, '\xC2')
+					s = append(s, '\xA0')
+				case 'L': // LS (#x2028)
+					s = append(s, '\xE2')
+					s = append(s, '\x80')
+					s = append(s, '\xA8')
+				case 'P': // PS (#x2029)
+					s = append(s, '\xE2')
+					s = append(s, '\x80')
+					s = append(s, '\xA9')
+				case 'x':
+					code_length = 2
+				case 'u':
+					code_length = 4
+				case 'U':
+					code_length = 8
+				default:
+					yaml_parser_set_scanner_error(parser, "while parsing a 
