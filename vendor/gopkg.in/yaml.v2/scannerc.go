@@ -1938,4 +1938,104 @@ func yaml_parser_scan_tag_handle(parser *yaml_parser_t, directive bool, start_ma
 	} else {
 		// It's either the '!' tag or not really a tag handle.  If it's a %TAG
 		// directive, it's an error.  If it's a tag token, it must be a part of URI.
-		if directive && stri
+		if directive && string(s) != "!" {
+			yaml_parser_set_scanner_tag_error(parser, directive,
+				start_mark, "did not find expected '!'")
+			return false
+		}
+	}
+
+	*handle = s
+	return true
+}
+
+// Scan a tag.
+func yaml_parser_scan_tag_uri(parser *yaml_parser_t, directive bool, head []byte, start_mark yaml_mark_t, uri *[]byte) bool {
+	//size_t length = head ? strlen((char *)head) : 0
+	var s []byte
+	hasTag := len(head) > 0
+
+	// Copy the head if needed.
+	//
+	// Note that we don't copy the leading '!' character.
+	if len(head) > 1 {
+		s = append(s, head[1:]...)
+	}
+
+	// Scan the tag.
+	if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+		return false
+	}
+
+	// The set of characters that may appear in URI is as follows:
+	//
+	//      '0'-'9', 'A'-'Z', 'a'-'z', '_', '-', ';', '/', '?', ':', '@', '&',
+	//      '=', '+', '$', ',', '.', '!', '~', '*', '\'', '(', ')', '[', ']',
+	//      '%'.
+	// [Go] Convert this into more reasonable logic.
+	for is_alpha(parser.buffer, parser.buffer_pos) || parser.buffer[parser.buffer_pos] == ';' ||
+		parser.buffer[parser.buffer_pos] == '/' || parser.buffer[parser.buffer_pos] == '?' ||
+		parser.buffer[parser.buffer_pos] == ':' || parser.buffer[parser.buffer_pos] == '@' ||
+		parser.buffer[parser.buffer_pos] == '&' || parser.buffer[parser.buffer_pos] == '=' ||
+		parser.buffer[parser.buffer_pos] == '+' || parser.buffer[parser.buffer_pos] == '$' ||
+		parser.buffer[parser.buffer_pos] == ',' || parser.buffer[parser.buffer_pos] == '.' ||
+		parser.buffer[parser.buffer_pos] == '!' || parser.buffer[parser.buffer_pos] == '~' ||
+		parser.buffer[parser.buffer_pos] == '*' || parser.buffer[parser.buffer_pos] == '\'' ||
+		parser.buffer[parser.buffer_pos] == '(' || parser.buffer[parser.buffer_pos] == ')' ||
+		parser.buffer[parser.buffer_pos] == '[' || parser.buffer[parser.buffer_pos] == ']' ||
+		parser.buffer[parser.buffer_pos] == '%' {
+		// Check if it is a URI-escape sequence.
+		if parser.buffer[parser.buffer_pos] == '%' {
+			if !yaml_parser_scan_uri_escapes(parser, directive, start_mark, &s) {
+				return false
+			}
+		} else {
+			s = read(parser, s)
+		}
+		if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+			return false
+		}
+		hasTag = true
+	}
+
+	if !hasTag {
+		yaml_parser_set_scanner_tag_error(parser, directive,
+			start_mark, "did not find expected tag URI")
+		return false
+	}
+	*uri = s
+	return true
+}
+
+// Decode an URI-escape sequence corresponding to a single UTF-8 character.
+func yaml_parser_scan_uri_escapes(parser *yaml_parser_t, directive bool, start_mark yaml_mark_t, s *[]byte) bool {
+
+	// Decode the required number of characters.
+	w := 1024
+	for w > 0 {
+		// Check for a URI-escaped octet.
+		if parser.unread < 3 && !yaml_parser_update_buffer(parser, 3) {
+			return false
+		}
+
+		if !(parser.buffer[parser.buffer_pos] == '%' &&
+			is_hex(parser.buffer, parser.buffer_pos+1) &&
+			is_hex(parser.buffer, parser.buffer_pos+2)) {
+			return yaml_parser_set_scanner_tag_error(parser, directive,
+				start_mark, "did not find URI escaped octet")
+		}
+
+		// Get the octet.
+		octet := byte((as_hex(parser.buffer, parser.buffer_pos+1) << 4) + as_hex(parser.buffer, parser.buffer_pos+2))
+
+		// If it is the leading octet, determine the length of the UTF-8 sequence.
+		if w == 1024 {
+			w = width(octet)
+			if w == 0 {
+				return yaml_parser_set_scanner_tag_error(parser, directive,
+					start_mark, "found an incorrect leading UTF-8 octet")
+			}
+		} else {
+			// Check if the trailing octet is correct.
+			if octet&0xC0 != 0x80 {
+				return yaml_parser_set_scanner_tag_error
