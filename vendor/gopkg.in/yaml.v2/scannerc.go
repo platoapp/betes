@@ -2408,4 +2408,125 @@ func yaml_parser_scan_flow_scalar(parser *yaml_parser_t, token *yaml_token_t, si
 				case 'U':
 					code_length = 8
 				default:
-					yaml_parser_set_scanner_error(parser, "while parsing a 
+					yaml_parser_set_scanner_error(parser, "while parsing a quoted scalar",
+						start_mark, "found unknown escape character")
+					return false
+				}
+
+				skip(parser)
+				skip(parser)
+
+				// Consume an arbitrary escape code.
+				if code_length > 0 {
+					var value int
+
+					// Scan the character value.
+					if parser.unread < code_length && !yaml_parser_update_buffer(parser, code_length) {
+						return false
+					}
+					for k := 0; k < code_length; k++ {
+						if !is_hex(parser.buffer, parser.buffer_pos+k) {
+							yaml_parser_set_scanner_error(parser, "while parsing a quoted scalar",
+								start_mark, "did not find expected hexdecimal number")
+							return false
+						}
+						value = (value << 4) + as_hex(parser.buffer, parser.buffer_pos+k)
+					}
+
+					// Check the value and write the character.
+					if (value >= 0xD800 && value <= 0xDFFF) || value > 0x10FFFF {
+						yaml_parser_set_scanner_error(parser, "while parsing a quoted scalar",
+							start_mark, "found invalid Unicode character escape code")
+						return false
+					}
+					if value <= 0x7F {
+						s = append(s, byte(value))
+					} else if value <= 0x7FF {
+						s = append(s, byte(0xC0+(value>>6)))
+						s = append(s, byte(0x80+(value&0x3F)))
+					} else if value <= 0xFFFF {
+						s = append(s, byte(0xE0+(value>>12)))
+						s = append(s, byte(0x80+((value>>6)&0x3F)))
+						s = append(s, byte(0x80+(value&0x3F)))
+					} else {
+						s = append(s, byte(0xF0+(value>>18)))
+						s = append(s, byte(0x80+((value>>12)&0x3F)))
+						s = append(s, byte(0x80+((value>>6)&0x3F)))
+						s = append(s, byte(0x80+(value&0x3F)))
+					}
+
+					// Advance the pointer.
+					for k := 0; k < code_length; k++ {
+						skip(parser)
+					}
+				}
+			} else {
+				// It is a non-escaped non-blank character.
+				s = read(parser, s)
+			}
+			if parser.unread < 2 && !yaml_parser_update_buffer(parser, 2) {
+				return false
+			}
+		}
+
+		if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+			return false
+		}
+
+		// Check if we are at the end of the scalar.
+		if single {
+			if parser.buffer[parser.buffer_pos] == '\'' {
+				break
+			}
+		} else {
+			if parser.buffer[parser.buffer_pos] == '"' {
+				break
+			}
+		}
+
+		// Consume blank characters.
+		for is_blank(parser.buffer, parser.buffer_pos) || is_break(parser.buffer, parser.buffer_pos) {
+			if is_blank(parser.buffer, parser.buffer_pos) {
+				// Consume a space or a tab character.
+				if !leading_blanks {
+					whitespaces = read(parser, whitespaces)
+				} else {
+					skip(parser)
+				}
+			} else {
+				if parser.unread < 2 && !yaml_parser_update_buffer(parser, 2) {
+					return false
+				}
+
+				// Check if it is a first line break.
+				if !leading_blanks {
+					whitespaces = whitespaces[:0]
+					leading_break = read_line(parser, leading_break)
+					leading_blanks = true
+				} else {
+					trailing_breaks = read_line(parser, trailing_breaks)
+				}
+			}
+			if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+				return false
+			}
+		}
+
+		// Join the whitespaces or fold line breaks.
+		if leading_blanks {
+			// Do we need to fold line breaks?
+			if len(leading_break) > 0 && leading_break[0] == '\n' {
+				if len(trailing_breaks) == 0 {
+					s = append(s, ' ')
+				} else {
+					s = append(s, trailing_breaks...)
+				}
+			} else {
+				s = append(s, leading_break...)
+				s = append(s, trailing_breaks...)
+			}
+			trailing_breaks = trailing_breaks[:0]
+			leading_break = leading_break[:0]
+		} else {
+			s = append(s, whitespaces...)
+			whitespaces =
