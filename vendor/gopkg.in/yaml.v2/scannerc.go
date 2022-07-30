@@ -2529,4 +2529,124 @@ func yaml_parser_scan_flow_scalar(parser *yaml_parser_t, token *yaml_token_t, si
 			leading_break = leading_break[:0]
 		} else {
 			s = append(s, whitespaces...)
-			whitespaces =
+			whitespaces = whitespaces[:0]
+		}
+	}
+
+	// Eat the right quote.
+	skip(parser)
+	end_mark := parser.mark
+
+	// Create a token.
+	*token = yaml_token_t{
+		typ:        yaml_SCALAR_TOKEN,
+		start_mark: start_mark,
+		end_mark:   end_mark,
+		value:      s,
+		style:      yaml_SINGLE_QUOTED_SCALAR_STYLE,
+	}
+	if !single {
+		token.style = yaml_DOUBLE_QUOTED_SCALAR_STYLE
+	}
+	return true
+}
+
+// Scan a plain scalar.
+func yaml_parser_scan_plain_scalar(parser *yaml_parser_t, token *yaml_token_t) bool {
+
+	var s, leading_break, trailing_breaks, whitespaces []byte
+	var leading_blanks bool
+	var indent = parser.indent + 1
+
+	start_mark := parser.mark
+	end_mark := parser.mark
+
+	// Consume the content of the plain scalar.
+	for {
+		// Check for a document indicator.
+		if parser.unread < 4 && !yaml_parser_update_buffer(parser, 4) {
+			return false
+		}
+		if parser.mark.column == 0 &&
+			((parser.buffer[parser.buffer_pos+0] == '-' &&
+				parser.buffer[parser.buffer_pos+1] == '-' &&
+				parser.buffer[parser.buffer_pos+2] == '-') ||
+				(parser.buffer[parser.buffer_pos+0] == '.' &&
+					parser.buffer[parser.buffer_pos+1] == '.' &&
+					parser.buffer[parser.buffer_pos+2] == '.')) &&
+			is_blankz(parser.buffer, parser.buffer_pos+3) {
+			break
+		}
+
+		// Check for a comment.
+		if parser.buffer[parser.buffer_pos] == '#' {
+			break
+		}
+
+		// Consume non-blank characters.
+		for !is_blankz(parser.buffer, parser.buffer_pos) {
+
+			// Check for indicators that may end a plain scalar.
+			if (parser.buffer[parser.buffer_pos] == ':' && is_blankz(parser.buffer, parser.buffer_pos+1)) ||
+				(parser.flow_level > 0 &&
+					(parser.buffer[parser.buffer_pos] == ',' ||
+						parser.buffer[parser.buffer_pos] == '?' || parser.buffer[parser.buffer_pos] == '[' ||
+						parser.buffer[parser.buffer_pos] == ']' || parser.buffer[parser.buffer_pos] == '{' ||
+						parser.buffer[parser.buffer_pos] == '}')) {
+				break
+			}
+
+			// Check if we need to join whitespaces and breaks.
+			if leading_blanks || len(whitespaces) > 0 {
+				if leading_blanks {
+					// Do we need to fold line breaks?
+					if leading_break[0] == '\n' {
+						if len(trailing_breaks) == 0 {
+							s = append(s, ' ')
+						} else {
+							s = append(s, trailing_breaks...)
+						}
+					} else {
+						s = append(s, leading_break...)
+						s = append(s, trailing_breaks...)
+					}
+					trailing_breaks = trailing_breaks[:0]
+					leading_break = leading_break[:0]
+					leading_blanks = false
+				} else {
+					s = append(s, whitespaces...)
+					whitespaces = whitespaces[:0]
+				}
+			}
+
+			// Copy the character.
+			s = read(parser, s)
+
+			end_mark = parser.mark
+			if parser.unread < 2 && !yaml_parser_update_buffer(parser, 2) {
+				return false
+			}
+		}
+
+		// Is it the end?
+		if !(is_blank(parser.buffer, parser.buffer_pos) || is_break(parser.buffer, parser.buffer_pos)) {
+			break
+		}
+
+		// Consume blank characters.
+		if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+			return false
+		}
+
+		for is_blank(parser.buffer, parser.buffer_pos) || is_break(parser.buffer, parser.buffer_pos) {
+			if is_blank(parser.buffer, parser.buffer_pos) {
+
+				// Check for tab characters that abuse indentation.
+				if leading_blanks && parser.mark.column < indent && is_tab(parser.buffer, parser.buffer_pos) {
+					yaml_parser_set_scanner_error(parser, "while scanning a plain scalar",
+						start_mark, "found a tab character that violates indentation")
+					return false
+				}
+
+				// Consume a space or a tab character.
+		
