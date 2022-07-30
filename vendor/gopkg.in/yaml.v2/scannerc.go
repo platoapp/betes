@@ -2038,4 +2038,130 @@ func yaml_parser_scan_uri_escapes(parser *yaml_parser_t, directive bool, start_m
 		} else {
 			// Check if the trailing octet is correct.
 			if octet&0xC0 != 0x80 {
-				return yaml_parser_set_scanner_tag_error
+				return yaml_parser_set_scanner_tag_error(parser, directive,
+					start_mark, "found an incorrect trailing UTF-8 octet")
+			}
+		}
+
+		// Copy the octet and move the pointers.
+		*s = append(*s, octet)
+		skip(parser)
+		skip(parser)
+		skip(parser)
+		w--
+	}
+	return true
+}
+
+// Scan a block scalar.
+func yaml_parser_scan_block_scalar(parser *yaml_parser_t, token *yaml_token_t, literal bool) bool {
+	// Eat the indicator '|' or '>'.
+	start_mark := parser.mark
+	skip(parser)
+
+	// Scan the additional block scalar indicators.
+	if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+		return false
+	}
+
+	// Check for a chomping indicator.
+	var chomping, increment int
+	if parser.buffer[parser.buffer_pos] == '+' || parser.buffer[parser.buffer_pos] == '-' {
+		// Set the chomping method and eat the indicator.
+		if parser.buffer[parser.buffer_pos] == '+' {
+			chomping = +1
+		} else {
+			chomping = -1
+		}
+		skip(parser)
+
+		// Check for an indentation indicator.
+		if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+			return false
+		}
+		if is_digit(parser.buffer, parser.buffer_pos) {
+			// Check that the indentation is greater than 0.
+			if parser.buffer[parser.buffer_pos] == '0' {
+				yaml_parser_set_scanner_error(parser, "while scanning a block scalar",
+					start_mark, "found an indentation indicator equal to 0")
+				return false
+			}
+
+			// Get the indentation level and eat the indicator.
+			increment = as_digit(parser.buffer, parser.buffer_pos)
+			skip(parser)
+		}
+
+	} else if is_digit(parser.buffer, parser.buffer_pos) {
+		// Do the same as above, but in the opposite order.
+
+		if parser.buffer[parser.buffer_pos] == '0' {
+			yaml_parser_set_scanner_error(parser, "while scanning a block scalar",
+				start_mark, "found an indentation indicator equal to 0")
+			return false
+		}
+		increment = as_digit(parser.buffer, parser.buffer_pos)
+		skip(parser)
+
+		if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+			return false
+		}
+		if parser.buffer[parser.buffer_pos] == '+' || parser.buffer[parser.buffer_pos] == '-' {
+			if parser.buffer[parser.buffer_pos] == '+' {
+				chomping = +1
+			} else {
+				chomping = -1
+			}
+			skip(parser)
+		}
+	}
+
+	// Eat whitespaces and comments to the end of the line.
+	if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+		return false
+	}
+	for is_blank(parser.buffer, parser.buffer_pos) {
+		skip(parser)
+		if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+			return false
+		}
+	}
+	if parser.buffer[parser.buffer_pos] == '#' {
+		for !is_breakz(parser.buffer, parser.buffer_pos) {
+			skip(parser)
+			if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+				return false
+			}
+		}
+	}
+
+	// Check if we are at the end of the line.
+	if !is_breakz(parser.buffer, parser.buffer_pos) {
+		yaml_parser_set_scanner_error(parser, "while scanning a block scalar",
+			start_mark, "did not find expected comment or line break")
+		return false
+	}
+
+	// Eat a line break.
+	if is_break(parser.buffer, parser.buffer_pos) {
+		if parser.unread < 2 && !yaml_parser_update_buffer(parser, 2) {
+			return false
+		}
+		skip_line(parser)
+	}
+
+	end_mark := parser.mark
+
+	// Set the indentation level if it was specified.
+	var indent int
+	if increment > 0 {
+		if parser.indent >= 0 {
+			indent = parser.indent + increment
+		} else {
+			indent = increment
+		}
+	}
+
+	// Scan the leading line breaks and determine the indentation level if needed.
+	var s, leading_break, trailing_breaks []byte
+	if !yaml_parser_scan_block_scalar_breaks(parser, &
