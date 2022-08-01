@@ -2649,4 +2649,48 @@ func yaml_parser_scan_plain_scalar(parser *yaml_parser_t, token *yaml_token_t) b
 				}
 
 				// Consume a space or a tab character.
-		
+				if !leading_blanks {
+					whitespaces = read(parser, whitespaces)
+				} else {
+					skip(parser)
+				}
+			} else {
+				if parser.unread < 2 && !yaml_parser_update_buffer(parser, 2) {
+					return false
+				}
+
+				// Check if it is a first line break.
+				if !leading_blanks {
+					whitespaces = whitespaces[:0]
+					leading_break = read_line(parser, leading_break)
+					leading_blanks = true
+				} else {
+					trailing_breaks = read_line(parser, trailing_breaks)
+				}
+			}
+			if parser.unread < 1 && !yaml_parser_update_buffer(parser, 1) {
+				return false
+			}
+		}
+
+		// Check indentation level.
+		if parser.flow_level == 0 && parser.mark.column < indent {
+			break
+		}
+	}
+
+	// Create a token.
+	*token = yaml_token_t{
+		typ:        yaml_SCALAR_TOKEN,
+		start_mark: start_mark,
+		end_mark:   end_mark,
+		value:      s,
+		style:      yaml_PLAIN_SCALAR_STYLE,
+	}
+
+	// Note that we change the 'simple_key_allowed' flag.
+	if leading_blanks {
+		parser.simple_key_allowed = true
+	}
+	return true
+}
