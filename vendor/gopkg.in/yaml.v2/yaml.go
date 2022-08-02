@@ -48,4 +48,116 @@ type Marshaler interface {
 //
 // Maps and pointers (to a struct, string, int, etc) are accepted as out
 // values. If an internal pointer within a struct is not initialized,
-// the yaml package will initialize it if necessary for un
+// the yaml package will initialize it if necessary for unmarshalling
+// the provided data. The out parameter must not be nil.
+//
+// The type of the decoded values should be compatible with the respective
+// values in out. If one or more values cannot be decoded due to a type
+// mismatches, decoding continues partially until the end of the YAML
+// content, and a *yaml.TypeError is returned with details for all
+// missed values.
+//
+// Struct fields are only unmarshalled if they are exported (have an
+// upper case first letter), and are unmarshalled using the field name
+// lowercased as the default key. Custom keys may be defined via the
+// "yaml" name in the field tag: the content preceding the first comma
+// is used as the key, and the following comma-separated options are
+// used to tweak the marshalling process (see Marshal).
+// Conflicting names result in a runtime error.
+//
+// For example:
+//
+//     type T struct {
+//         F int `yaml:"a,omitempty"`
+//         B int
+//     }
+//     var t T
+//     yaml.Unmarshal([]byte("a: 1\nb: 2"), &t)
+//
+// See the documentation of Marshal for the format of tags and a list of
+// supported tag options.
+//
+func Unmarshal(in []byte, out interface{}) (err error) {
+	return unmarshal(in, out, false)
+}
+
+// UnmarshalStrict is like Unmarshal except that any fields that are found
+// in the data that do not have corresponding struct members, or mapping
+// keys that are duplicates, will result in
+// an error.
+func UnmarshalStrict(in []byte, out interface{}) (err error) {
+	return unmarshal(in, out, true)
+}
+
+// A Decorder reads and decodes YAML values from an input stream.
+type Decoder struct {
+	strict bool
+	parser *parser
+}
+
+// NewDecoder returns a new decoder that reads from r.
+//
+// The decoder introduces its own buffering and may read
+// data from r beyond the YAML values requested.
+func NewDecoder(r io.Reader) *Decoder {
+	return &Decoder{
+		parser: newParserFromReader(r),
+	}
+}
+
+// SetStrict sets whether strict decoding behaviour is enabled when
+// decoding items in the data (see UnmarshalStrict). By default, decoding is not strict.
+func (dec *Decoder) SetStrict(strict bool) {
+	dec.strict = strict
+}
+
+// Decode reads the next YAML-encoded value from its input
+// and stores it in the value pointed to by v.
+//
+// See the documentation for Unmarshal for details about the
+// conversion of YAML into a Go value.
+func (dec *Decoder) Decode(v interface{}) (err error) {
+	d := newDecoder(dec.strict)
+	defer handleErr(&err)
+	node := dec.parser.parse()
+	if node == nil {
+		return io.EOF
+	}
+	out := reflect.ValueOf(v)
+	if out.Kind() == reflect.Ptr && !out.IsNil() {
+		out = out.Elem()
+	}
+	d.unmarshal(node, out)
+	if len(d.terrors) > 0 {
+		return &TypeError{d.terrors}
+	}
+	return nil
+}
+
+func unmarshal(in []byte, out interface{}, strict bool) (err error) {
+	defer handleErr(&err)
+	d := newDecoder(strict)
+	p := newParser(in)
+	defer p.destroy()
+	node := p.parse()
+	if node != nil {
+		v := reflect.ValueOf(out)
+		if v.Kind() == reflect.Ptr && !v.IsNil() {
+			v = v.Elem()
+		}
+		d.unmarshal(node, v)
+	}
+	if len(d.terrors) > 0 {
+		return &TypeError{d.terrors}
+	}
+	return nil
+}
+
+// Marshal serializes the value provided into a YAML document. The structure
+// of the generated document will reflect the structure of the value itself.
+// Maps and pointers (to struct, string, int, etc) are accepted as the in value.
+//
+// Struct fields are only marshalled if they are exported (have an upper case
+// first letter), and are marshalled using the field name lowercased as the
+// default key. Custom keys may be defined via the "yaml" name in the field
+// tag: the content preceding the firs
