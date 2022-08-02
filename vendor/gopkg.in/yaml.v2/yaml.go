@@ -160,4 +160,119 @@ func unmarshal(in []byte, out interface{}, strict bool) (err error) {
 // Struct fields are only marshalled if they are exported (have an upper case
 // first letter), and are marshalled using the field name lowercased as the
 // default key. Custom keys may be defined via the "yaml" name in the field
-// tag: the content preceding the firs
+// tag: the content preceding the first comma is used as the key, and the
+// following comma-separated options are used to tweak the marshalling process.
+// Conflicting names result in a runtime error.
+//
+// The field tag format accepted is:
+//
+//     `(...) yaml:"[<key>][,<flag1>[,<flag2>]]" (...)`
+//
+// The following flags are currently supported:
+//
+//     omitempty    Only include the field if it's not set to the zero
+//                  value for the type or to empty slices or maps.
+//                  Zero valued structs will be omitted if all their public
+//                  fields are zero, unless they implement an IsZero
+//                  method (see the IsZeroer interface type), in which
+//                  case the field will be included if that method returns true.
+//
+//     flow         Marshal using a flow style (useful for structs,
+//                  sequences and maps).
+//
+//     inline       Inline the field, which must be a struct or a map,
+//                  causing all of its fields or keys to be processed as if
+//                  they were part of the outer struct. For maps, keys must
+//                  not conflict with the yaml keys of other struct fields.
+//
+// In addition, if the key is "-", the field is ignored.
+//
+// For example:
+//
+//     type T struct {
+//         F int `yaml:"a,omitempty"`
+//         B int
+//     }
+//     yaml.Marshal(&T{B: 2}) // Returns "b: 2\n"
+//     yaml.Marshal(&T{F: 1}} // Returns "a: 1\nb: 0\n"
+//
+func Marshal(in interface{}) (out []byte, err error) {
+	defer handleErr(&err)
+	e := newEncoder()
+	defer e.destroy()
+	e.marshalDoc("", reflect.ValueOf(in))
+	e.finish()
+	out = e.out
+	return
+}
+
+// An Encoder writes YAML values to an output stream.
+type Encoder struct {
+	encoder *encoder
+}
+
+// NewEncoder returns a new encoder that writes to w.
+// The Encoder should be closed after use to flush all data
+// to w.
+func NewEncoder(w io.Writer) *Encoder {
+	return &Encoder{
+		encoder: newEncoderWithWriter(w),
+	}
+}
+
+// Encode writes the YAML encoding of v to the stream.
+// If multiple items are encoded to the stream, the
+// second and subsequent document will be preceded
+// with a "---" document separator, but the first will not.
+//
+// See the documentation for Marshal for details about the conversion of Go
+// values to YAML.
+func (e *Encoder) Encode(v interface{}) (err error) {
+	defer handleErr(&err)
+	e.encoder.marshalDoc("", reflect.ValueOf(v))
+	return nil
+}
+
+// Close closes the encoder by writing any remaining data.
+// It does not write a stream terminating string "...".
+func (e *Encoder) Close() (err error) {
+	defer handleErr(&err)
+	e.encoder.finish()
+	return nil
+}
+
+func handleErr(err *error) {
+	if v := recover(); v != nil {
+		if e, ok := v.(yamlError); ok {
+			*err = e.err
+		} else {
+			panic(v)
+		}
+	}
+}
+
+type yamlError struct {
+	err error
+}
+
+func fail(err error) {
+	panic(yamlError{err})
+}
+
+func failf(format string, args ...interface{}) {
+	panic(yamlError{fmt.Errorf("yaml: "+format, args...)})
+}
+
+// A TypeError is returned by Unmarshal when one or more fields in
+// the YAML document cannot be properly decoded into the requested
+// types. When this error is returned, the value is still
+// unmarshaled partially.
+type TypeError struct {
+	Errors []string
+}
+
+func (e *TypeError) Error() string {
+	return fmt.Sprintf("yaml: unmarshal errors:\n  %s", strings.Join(e.Errors, "\n  "))
+}
+
+// ---------------------------------------------------------------------
