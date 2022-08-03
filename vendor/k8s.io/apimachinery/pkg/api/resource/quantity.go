@@ -461,3 +461,334 @@ func (q *Quantity) CanonicalizeBytes(out []byte) (result, suffix []byte) {
 // AsInt64 returns a representation of the current value as an int64 if a fast conversion
 // is possible. If false is returned, callers must use the inf.Dec form of this quantity.
 func (q *Quantity) AsInt64() (int64, bool) {
+	if q.d.Dec != nil {
+		return 0, false
+	}
+	return q.i.AsInt64()
+}
+
+// ToDec promotes the quantity in place to use an inf.Dec representation and returns itself.
+func (q *Quantity) ToDec() *Quantity {
+	if q.d.Dec == nil {
+		q.d.Dec = q.i.AsDec()
+		q.i = int64Amount{}
+	}
+	return q
+}
+
+// AsDec returns the quantity as represented by a scaled inf.Dec.
+func (q *Quantity) AsDec() *inf.Dec {
+	if q.d.Dec != nil {
+		return q.d.Dec
+	}
+	q.d.Dec = q.i.AsDec()
+	q.i = int64Amount{}
+	return q.d.Dec
+}
+
+// AsCanonicalBytes returns the canonical byte representation of this quantity as a mantissa
+// and base 10 exponent. The out byte slice may be passed to the method to avoid an extra
+// allocation.
+func (q *Quantity) AsCanonicalBytes(out []byte) (result []byte, exponent int32) {
+	if q.d.Dec != nil {
+		return q.d.AsCanonicalBytes(out)
+	}
+	return q.i.AsCanonicalBytes(out)
+}
+
+// IsZero returns true if the quantity is equal to zero.
+func (q *Quantity) IsZero() bool {
+	if q.d.Dec != nil {
+		return q.d.Dec.Sign() == 0
+	}
+	return q.i.value == 0
+}
+
+// Sign returns 0 if the quantity is zero, -1 if the quantity is less than zero, or 1 if the
+// quantity is greater than zero.
+func (q *Quantity) Sign() int {
+	if q.d.Dec != nil {
+		return q.d.Dec.Sign()
+	}
+	return q.i.Sign()
+}
+
+// AsScaled returns the current value, rounded up to the provided scale, and returns
+// false if the scale resulted in a loss of precision.
+func (q *Quantity) AsScale(scale Scale) (CanonicalValue, bool) {
+	if q.d.Dec != nil {
+		return q.d.AsScale(scale)
+	}
+	return q.i.AsScale(scale)
+}
+
+// RoundUp updates the quantity to the provided scale, ensuring that the value is at
+// least 1. False is returned if the rounding operation resulted in a loss of precision.
+// Negative numbers are rounded away from zero (-9 scale 1 rounds to -10).
+func (q *Quantity) RoundUp(scale Scale) bool {
+	if q.d.Dec != nil {
+		q.s = ""
+		d, exact := q.d.AsScale(scale)
+		q.d = d
+		return exact
+	}
+	// avoid clearing the string value if we have already calculated it
+	if q.i.scale >= scale {
+		return true
+	}
+	q.s = ""
+	i, exact := q.i.AsScale(scale)
+	q.i = i
+	return exact
+}
+
+// Add adds the provide y quantity to the current value. If the current value is zero,
+// the format of the quantity will be updated to the format of y.
+func (q *Quantity) Add(y Quantity) {
+	q.s = ""
+	if q.d.Dec == nil && y.d.Dec == nil {
+		if q.i.value == 0 {
+			q.Format = y.Format
+		}
+		if q.i.Add(y.i) {
+			return
+		}
+	} else if q.IsZero() {
+		q.Format = y.Format
+	}
+	q.ToDec().d.Dec.Add(q.d.Dec, y.AsDec())
+}
+
+// Sub subtracts the provided quantity from the current value in place. If the current
+// value is zero, the format of the quantity will be updated to the format of y.
+func (q *Quantity) Sub(y Quantity) {
+	q.s = ""
+	if q.IsZero() {
+		q.Format = y.Format
+	}
+	if q.d.Dec == nil && y.d.Dec == nil && q.i.Sub(y.i) {
+		return
+	}
+	q.ToDec().d.Dec.Sub(q.d.Dec, y.AsDec())
+}
+
+// Cmp returns 0 if the quantity is equal to y, -1 if the quantity is less than y, or 1 if the
+// quantity is greater than y.
+func (q *Quantity) Cmp(y Quantity) int {
+	if q.d.Dec == nil && y.d.Dec == nil {
+		return q.i.Cmp(y.i)
+	}
+	return q.AsDec().Cmp(y.AsDec())
+}
+
+// CmpInt64 returns 0 if the quantity is equal to y, -1 if the quantity is less than y, or 1 if the
+// quantity is greater than y.
+func (q *Quantity) CmpInt64(y int64) int {
+	if q.d.Dec != nil {
+		return q.d.Dec.Cmp(inf.NewDec(y, inf.Scale(0)))
+	}
+	return q.i.Cmp(int64Amount{value: y})
+}
+
+// Neg sets quantity to be the negative value of itself.
+func (q *Quantity) Neg() {
+	q.s = ""
+	if q.d.Dec == nil {
+		q.i.value = -q.i.value
+		return
+	}
+	q.d.Dec.Neg(q.d.Dec)
+}
+
+// int64QuantityExpectedBytes is the expected width in bytes of the canonical string representation
+// of most Quantity values.
+const int64QuantityExpectedBytes = 18
+
+// String formats the Quantity as a string, caching the result if not calculated.
+// String is an expensive operation and caching this result significantly reduces the cost of
+// normal parse / marshal operations on Quantity.
+func (q *Quantity) String() string {
+	if len(q.s) == 0 {
+		result := make([]byte, 0, int64QuantityExpectedBytes)
+		number, suffix := q.CanonicalizeBytes(result)
+		number = append(number, suffix...)
+		q.s = string(number)
+	}
+	return q.s
+}
+
+// MarshalJSON implements the json.Marshaller interface.
+func (q Quantity) MarshalJSON() ([]byte, error) {
+	if len(q.s) > 0 {
+		out := make([]byte, len(q.s)+2)
+		out[0], out[len(out)-1] = '"', '"'
+		copy(out[1:], q.s)
+		return out, nil
+	}
+	result := make([]byte, int64QuantityExpectedBytes, int64QuantityExpectedBytes)
+	result[0] = '"'
+	number, suffix := q.CanonicalizeBytes(result[1:1])
+	// if the same slice was returned to us that we passed in, avoid another allocation by copying number into
+	// the source slice and returning that
+	if len(number) > 0 && &number[0] == &result[1] && (len(number)+len(suffix)+2) <= int64QuantityExpectedBytes {
+		number = append(number, suffix...)
+		number = append(number, '"')
+		return result[:1+len(number)], nil
+	}
+	// if CanonicalizeBytes needed more space than our slice provided, we may need to allocate again so use
+	// append
+	result = result[:1]
+	result = append(result, number...)
+	result = append(result, suffix...)
+	result = append(result, '"')
+	return result, nil
+}
+
+// UnmarshalJSON implements the json.Unmarshaller interface.
+// TODO: Remove support for leading/trailing whitespace
+func (q *Quantity) UnmarshalJSON(value []byte) error {
+	l := len(value)
+	if l == 4 && bytes.Equal(value, []byte("null")) {
+		q.d.Dec = nil
+		q.i = int64Amount{}
+		return nil
+	}
+	if l >= 2 && value[0] == '"' && value[l-1] == '"' {
+		value = value[1 : l-1]
+	}
+
+	parsed, err := ParseQuantity(strings.TrimSpace(string(value)))
+	if err != nil {
+		return err
+	}
+
+	// This copy is safe because parsed will not be referred to again.
+	*q = parsed
+	return nil
+}
+
+// NewQuantity returns a new Quantity representing the given
+// value in the given format.
+func NewQuantity(value int64, format Format) *Quantity {
+	return &Quantity{
+		i:      int64Amount{value: value},
+		Format: format,
+	}
+}
+
+// NewMilliQuantity returns a new Quantity representing the given
+// value * 1/1000 in the given format. Note that BinarySI formatting
+// will round fractional values, and will be changed to DecimalSI for
+// values x where (-1 < x < 1) && (x != 0).
+func NewMilliQuantity(value int64, format Format) *Quantity {
+	return &Quantity{
+		i:      int64Amount{value: value, scale: -3},
+		Format: format,
+	}
+}
+
+// NewScaledQuantity returns a new Quantity representing the given
+// value * 10^scale in DecimalSI format.
+func NewScaledQuantity(value int64, scale Scale) *Quantity {
+	return &Quantity{
+		i:      int64Amount{value: value, scale: scale},
+		Format: DecimalSI,
+	}
+}
+
+// Value returns the value of q; any fractional part will be lost.
+func (q *Quantity) Value() int64 {
+	return q.ScaledValue(0)
+}
+
+// MilliValue returns the value of ceil(q * 1000); this could overflow an int64;
+// if that's a concern, call Value() first to verify the number is small enough.
+func (q *Quantity) MilliValue() int64 {
+	return q.ScaledValue(Milli)
+}
+
+// ScaledValue returns the value of ceil(q * 10^scale); this could overflow an int64.
+// To detect overflow, call Value() first and verify the expected magnitude.
+func (q *Quantity) ScaledValue(scale Scale) int64 {
+	if q.d.Dec == nil {
+		i, _ := q.i.AsScaledInt64(scale)
+		return i
+	}
+	dec := q.d.Dec
+	return scaledValue(dec.UnscaledBig(), int(dec.Scale()), int(scale.infScale()))
+}
+
+// Set sets q's value to be value.
+func (q *Quantity) Set(value int64) {
+	q.SetScaled(value, 0)
+}
+
+// SetMilli sets q's value to be value * 1/1000.
+func (q *Quantity) SetMilli(value int64) {
+	q.SetScaled(value, Milli)
+}
+
+// SetScaled sets q's value to be value * 10^scale
+func (q *Quantity) SetScaled(value int64, scale Scale) {
+	q.s = ""
+	q.d.Dec = nil
+	q.i = int64Amount{value: value, scale: scale}
+}
+
+// Copy is a convenience function that makes a deep copy for you. Non-deep
+// copies of quantities share pointers and you will regret that.
+func (q *Quantity) Copy() *Quantity {
+	if q.d.Dec == nil {
+		return &Quantity{
+			s:      q.s,
+			i:      q.i,
+			Format: q.Format,
+		}
+	}
+	tmp := &inf.Dec{}
+	return &Quantity{
+		s:      q.s,
+		d:      infDecAmount{tmp.Set(q.d.Dec)},
+		Format: q.Format,
+	}
+}
+
+// qFlag is a helper type for the Flag function
+type qFlag struct {
+	dest *Quantity
+}
+
+// Sets the value of the internal Quantity. (used by flag & pflag)
+func (qf qFlag) Set(val string) error {
+	q, err := ParseQuantity(val)
+	if err != nil {
+		return err
+	}
+	// This copy is OK because q will not be referenced again.
+	*qf.dest = q
+	return nil
+}
+
+// Converts the value of the internal Quantity to a string. (used by flag & pflag)
+func (qf qFlag) String() string {
+	return qf.dest.String()
+}
+
+// States the type of flag this is (Quantity). (used by pflag)
+func (qf qFlag) Type() string {
+	return "quantity"
+}
+
+// QuantityFlag is a helper that makes a quantity flag (using standard flag package).
+// Will panic if defaultValue is not a valid quantity.
+func QuantityFlag(flagName, defaultValue, description string) *Quantity {
+	q := MustParse(defaultValue)
+	flag.Var(NewQuantityFlagValue(&q), flagName, description)
+	return &q
+}
+
+// NewQuantityFlagValue returns an object that can be used to back a flag,
+// pointing at the given Quantity variable.
+func NewQuantityFlagValue(q *Quantity) flag.Value {
+	return qFlag{q}
+}
