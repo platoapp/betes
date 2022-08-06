@@ -215,4 +215,74 @@ func Convert_Slice_string_To_unversioned_Time(input *[]string, out *Time, s conv
 	return out.UnmarshalQueryParameter(str)
 }
 
-func Convert_string_To_labels_Selector(in *string, out *labels.Selector, s conversion.Scope) error
+func Convert_string_To_labels_Selector(in *string, out *labels.Selector, s conversion.Scope) error {
+	selector, err := labels.Parse(*in)
+	if err != nil {
+		return err
+	}
+	*out = selector
+	return nil
+}
+
+func Convert_string_To_fields_Selector(in *string, out *fields.Selector, s conversion.Scope) error {
+	selector, err := fields.ParseSelector(*in)
+	if err != nil {
+		return err
+	}
+	*out = selector
+	return nil
+}
+
+func Convert_labels_Selector_To_string(in *labels.Selector, out *string, s conversion.Scope) error {
+	if *in == nil {
+		return nil
+	}
+	*out = (*in).String()
+	return nil
+}
+
+func Convert_fields_Selector_To_string(in *fields.Selector, out *string, s conversion.Scope) error {
+	if *in == nil {
+		return nil
+	}
+	*out = (*in).String()
+	return nil
+}
+
+// +k8s:conversion-fn=copy-only
+func Convert_resource_Quantity_To_resource_Quantity(in *resource.Quantity, out *resource.Quantity, s conversion.Scope) error {
+	*out = *in
+	return nil
+}
+
+func Convert_map_to_unversioned_LabelSelector(in *map[string]string, out *LabelSelector, s conversion.Scope) error {
+	if in == nil {
+		return nil
+	}
+	for labelKey, labelValue := range *in {
+		AddLabelToSelector(out, labelKey, labelValue)
+	}
+	return nil
+}
+
+func Convert_unversioned_LabelSelector_to_map(in *LabelSelector, out *map[string]string, s conversion.Scope) error {
+	var err error
+	*out, err = LabelSelectorAsMap(in)
+	return err
+}
+
+// Convert_Slice_string_To_Slice_int32 converts multiple query parameters or
+// a single query parameter with a comma delimited value to multiple int32.
+// This is used for port forwarding which needs the ports as int32.
+func Convert_Slice_string_To_Slice_int32(in *[]string, out *[]int32, s conversion.Scope) error {
+	for _, s := range *in {
+		for _, v := range strings.Split(s, ",") {
+			x, err := strconv.ParseUint(v, 10, 16)
+			if err != nil {
+				return fmt.Errorf("cannot convert to []int32: %v", err)
+			}
+			*out = append(*out, int32(x))
+		}
+	}
+	return nil
+}
