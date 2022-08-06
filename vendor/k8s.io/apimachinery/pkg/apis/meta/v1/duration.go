@@ -25,4 +25,23 @@ import (
 // marshaling to YAML and JSON. In particular, it marshals into strings, which
 // can be used as map keys in json.
 type Duration struct {
-	time.Duration `protobuf:"varint,1,opt,name=duration,casttype=time.Dur
+	time.Duration `protobuf:"varint,1,opt,name=duration,casttype=time.Duration"`
+}
+
+// UnmarshalJSON implements the json.Unmarshaller interface.
+func (d *Duration) UnmarshalJSON(b []byte) error {
+	var str string
+	json.Unmarshal(b, &str)
+
+	pd, err := time.ParseDuration(str)
+	if err != nil {
+		return err
+	}
+	d.Duration = pd
+	return nil
+}
+
+// MarshalJSON implements the json.Marshaler interface.
+func (d Duration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.Duration.String())
+}
