@@ -106,4 +106,65 @@ func (*APIResource) ProtoMessage()               {}
 func (*APIResource) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{2} }
 
 func (m *APIResourceList) Reset()                    { *m = APIResourceList{} }
-func (*AP
+func (*APIResourceList) ProtoMessage()               {}
+func (*APIResourceList) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{3} }
+
+func (m *APIVersions) Reset()                    { *m = APIVersions{} }
+func (*APIVersions) ProtoMessage()               {}
+func (*APIVersions) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{4} }
+
+func (m *DeleteOptions) Reset()                    { *m = DeleteOptions{} }
+func (*DeleteOptions) ProtoMessage()               {}
+func (*DeleteOptions) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{5} }
+
+func (m *Duration) Reset()                    { *m = Duration{} }
+func (*Duration) ProtoMessage()               {}
+func (*Duration) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{6} }
+
+func (m *ExportOptions) Reset()                    { *m = ExportOptions{} }
+func (*ExportOptions) ProtoMessage()               {}
+func (*ExportOptions) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{7} }
+
+func (m *GetOptions) Reset()                    { *m = GetOptions{} }
+func (*GetOptions) ProtoMessage()               {}
+func (*GetOptions) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{8} }
+
+func (m *GroupKind) Reset()                    { *m = GroupKind{} }
+func (*GroupKind) ProtoMessage()               {}
+func (*GroupKind) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{9} }
+
+func (m *GroupResource) Reset()                    { *m = GroupResource{} }
+func (*GroupResource) ProtoMessage()               {}
+func (*GroupResource) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{10} }
+
+func (m *GroupVersion) Reset()                    { *m = GroupVersion{} }
+func (*GroupVersion) ProtoMessage()               {}
+func (*GroupVersion) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{11} }
+
+func (m *GroupVersionForDiscovery) Reset()      { *m = GroupVersionForDiscovery{} }
+func (*GroupVersionForDiscovery) ProtoMessage() {}
+func (*GroupVersionForDiscovery) Descriptor() ([]byte, []int) {
+	return fileDescriptorGenerated, []int{12}
+}
+
+func (m *GroupVersionKind) Reset()                    { *m = GroupVersionKind{} }
+func (*GroupVersionKind) ProtoMessage()               {}
+func (*GroupVersionKind) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{13} }
+
+func (m *GroupVersionResource) Reset()                    { *m = GroupVersionResource{} }
+func (*GroupVersionResource) ProtoMessage()               {}
+func (*GroupVersionResource) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{14} }
+
+func (m *Initializer) Reset()                    { *m = Initializer{} }
+func (*Initializer) ProtoMessage()               {}
+func (*Initializer) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{15} }
+
+func (m *Initializers) Reset()                    { *m = Initializers{} }
+func (*Initializers) ProtoMessage()               {}
+func (*Initializers) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{16} }
+
+func (m *LabelSelector) Reset()                    { *m = LabelSelector{} }
+func (*LabelSelector) ProtoMessage()               {}
+func (*LabelSelector) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{17} }
+
+func (m *LabelSelectorRequirement) Reset()      { *m = LabelSelector
