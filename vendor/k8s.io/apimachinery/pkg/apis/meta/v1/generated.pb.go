@@ -167,4 +167,73 @@ func (m *LabelSelector) Reset()                    { *m = LabelSelector{} }
 func (*LabelSelector) ProtoMessage()               {}
 func (*LabelSelector) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{17} }
 
-func (m *LabelSelectorRequirement) Reset()      { *m = LabelSelector
+func (m *LabelSelectorRequirement) Reset()      { *m = LabelSelectorRequirement{} }
+func (*LabelSelectorRequirement) ProtoMessage() {}
+func (*LabelSelectorRequirement) Descriptor() ([]byte, []int) {
+	return fileDescriptorGenerated, []int{18}
+}
+
+func (m *List) Reset()                    { *m = List{} }
+func (*List) ProtoMessage()               {}
+func (*List) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{19} }
+
+func (m *ListMeta) Reset()                    { *m = ListMeta{} }
+func (*ListMeta) ProtoMessage()               {}
+func (*ListMeta) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{20} }
+
+func (m *ListOptions) Reset()                    { *m = ListOptions{} }
+func (*ListOptions) ProtoMessage()               {}
+func (*ListOptions) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{21} }
+
+func (m *MicroTime) Reset()                    { *m = MicroTime{} }
+func (*MicroTime) ProtoMessage()               {}
+func (*MicroTime) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{22} }
+
+func (m *ObjectMeta) Reset()                    { *m = ObjectMeta{} }
+func (*ObjectMeta) ProtoMessage()               {}
+func (*ObjectMeta) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{23} }
+
+func (m *OwnerReference) Reset()                    { *m = OwnerReference{} }
+func (*OwnerReference) ProtoMessage()               {}
+func (*OwnerReference) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{24} }
+
+func (m *Patch) Reset()                    { *m = Patch{} }
+func (*Patch) ProtoMessage()               {}
+func (*Patch) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{25} }
+
+func (m *Preconditions) Reset()                    { *m = Preconditions{} }
+func (*Preconditions) ProtoMessage()               {}
+func (*Preconditions) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{26} }
+
+func (m *RootPaths) Reset()                    { *m = RootPaths{} }
+func (*RootPaths) ProtoMessage()               {}
+func (*RootPaths) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{27} }
+
+func (m *ServerAddressByClientCIDR) Reset()      { *m = ServerAddressByClientCIDR{} }
+func (*ServerAddressByClientCIDR) ProtoMessage() {}
+func (*ServerAddressByClientCIDR) Descriptor() ([]byte, []int) {
+	return fileDescriptorGenerated, []int{28}
+}
+
+func (m *Status) Reset()                    { *m = Status{} }
+func (*Status) ProtoMessage()               {}
+func (*Status) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{29} }
+
+func (m *StatusCause) Reset()                    { *m = StatusCause{} }
+func (*StatusCause) ProtoMessage()               {}
+func (*StatusCause) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{30} }
+
+func (m *StatusDetails) Reset()                    { *m = StatusDetails{} }
+func (*StatusDetails) ProtoMessage()               {}
+func (*StatusDetails) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{31} }
+
+func (m *Time) Reset()                    { *m = Time{} }
+func (*Time) ProtoMessage()               {}
+func (*Time) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{32} }
+
+func (m *Timestamp) Reset()                    { *m = Timestamp{} }
+func (*Timestamp) ProtoMessage()               {}
+func (*Timestamp) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{33} }
+
+func (m *TypeMeta) Reset()                    { *m = TypeMeta{} }
+func (*TypeMeta) P
