@@ -1121,3 +1121,141 @@ func (m *ObjectMeta) Marshal() (dAtA []byte, err error) {
 	if err != nil {
 		return nil, err
 	}
+	return dAtA[:n], nil
+}
+
+func (m *ObjectMeta) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintGenerated(dAtA, i, uint64(len(m.Name)))
+	i += copy(dAtA[i:], m.Name)
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintGenerated(dAtA, i, uint64(len(m.GenerateName)))
+	i += copy(dAtA[i:], m.GenerateName)
+	dAtA[i] = 0x1a
+	i++
+	i = encodeVarintGenerated(dAtA, i, uint64(len(m.Namespace)))
+	i += copy(dAtA[i:], m.Namespace)
+	dAtA[i] = 0x22
+	i++
+	i = encodeVarintGenerated(dAtA, i, uint64(len(m.SelfLink)))
+	i += copy(dAtA[i:], m.SelfLink)
+	dAtA[i] = 0x2a
+	i++
+	i = encodeVarintGenerated(dAtA, i, uint64(len(m.UID)))
+	i += copy(dAtA[i:], m.UID)
+	dAtA[i] = 0x32
+	i++
+	i = encodeVarintGenerated(dAtA, i, uint64(len(m.ResourceVersion)))
+	i += copy(dAtA[i:], m.ResourceVersion)
+	dAtA[i] = 0x38
+	i++
+	i = encodeVarintGenerated(dAtA, i, uint64(m.Generation))
+	dAtA[i] = 0x42
+	i++
+	i = encodeVarintGenerated(dAtA, i, uint64(m.CreationTimestamp.Size()))
+	n6, err := m.CreationTimestamp.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n6
+	if m.DeletionTimestamp != nil {
+		dAtA[i] = 0x4a
+		i++
+		i = encodeVarintGenerated(dAtA, i, uint64(m.DeletionTimestamp.Size()))
+		n7, err := m.DeletionTimestamp.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n7
+	}
+	if m.DeletionGracePeriodSeconds != nil {
+		dAtA[i] = 0x50
+		i++
+		i = encodeVarintGenerated(dAtA, i, uint64(*m.DeletionGracePeriodSeconds))
+	}
+	if len(m.Labels) > 0 {
+		keysForLabels := make([]string, 0, len(m.Labels))
+		for k := range m.Labels {
+			keysForLabels = append(keysForLabels, string(k))
+		}
+		github_com_gogo_protobuf_sortkeys.Strings(keysForLabels)
+		for _, k := range keysForLabels {
+			dAtA[i] = 0x5a
+			i++
+			v := m.Labels[string(k)]
+			mapSize := 1 + len(k) + sovGenerated(uint64(len(k))) + 1 + len(v) + sovGenerated(uint64(len(v)))
+			i = encodeVarintGenerated(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0xa
+			i++
+			i = encodeVarintGenerated(dAtA, i, uint64(len(k)))
+			i += copy(dAtA[i:], k)
+			dAtA[i] = 0x12
+			i++
+			i = encodeVarintGenerated(dAtA, i, uint64(len(v)))
+			i += copy(dAtA[i:], v)
+		}
+	}
+	if len(m.Annotations) > 0 {
+		keysForAnnotations := make([]string, 0, len(m.Annotations))
+		for k := range m.Annotations {
+			keysForAnnotations = append(keysForAnnotations, string(k))
+		}
+		github_com_gogo_protobuf_sortkeys.Strings(keysForAnnotations)
+		for _, k := range keysForAnnotations {
+			dAtA[i] = 0x62
+			i++
+			v := m.Annotations[string(k)]
+			mapSize := 1 + len(k) + sovGenerated(uint64(len(k))) + 1 + len(v) + sovGenerated(uint64(len(v)))
+			i = encodeVarintGenerated(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0xa
+			i++
+			i = encodeVarintGenerated(dAtA, i, uint64(len(k)))
+			i += copy(dAtA[i:], k)
+			dAtA[i] = 0x12
+			i++
+			i = encodeVarintGenerated(dAtA, i, uint64(len(v)))
+			i += copy(dAtA[i:], v)
+		}
+	}
+	if len(m.OwnerReferences) > 0 {
+		for _, msg := range m.OwnerReferences {
+			dAtA[i] = 0x6a
+			i++
+			i = encodeVarintGenerated(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.Finalizers) > 0 {
+		for _, s := range m.Finalizers {
+			dAtA[i] = 0x72
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			dAtA[i] = uint8(l)
+			i++
+			i += copy(dAtA[i:], s)
+		}
+	}
+	dAtA[i] = 0x7a
+	i++
+	i = encodeVarintGenerated(dAtA, i, uint64(len(m.ClusterName)))
+	i += copy(dAtA[i:], m.ClusterName)
+	if m.Initializers != nil {
+		dAtA[i] = 0x82
+		i++
+		dAtA[i] = 0x1
+		i
