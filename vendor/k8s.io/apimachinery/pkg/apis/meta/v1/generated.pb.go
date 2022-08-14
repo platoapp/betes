@@ -236,4 +236,46 @@ func (*Timestamp) ProtoMessage()               {}
 func (*Timestamp) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{33} }
 
 func (m *TypeMeta) Reset()                    { *m = TypeMeta{} }
-func (*TypeMeta) P
+func (*TypeMeta) ProtoMessage()               {}
+func (*TypeMeta) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{34} }
+
+func (m *Verbs) Reset()                    { *m = Verbs{} }
+func (*Verbs) ProtoMessage()               {}
+func (*Verbs) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{35} }
+
+func (m *WatchEvent) Reset()                    { *m = WatchEvent{} }
+func (*WatchEvent) ProtoMessage()               {}
+func (*WatchEvent) Descriptor() ([]byte, []int) { return fileDescriptorGenerated, []int{36} }
+
+func init() {
+	proto.RegisterType((*APIGroup)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.APIGroup")
+	proto.RegisterType((*APIGroupList)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.APIGroupList")
+	proto.RegisterType((*APIResource)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.APIResource")
+	proto.RegisterType((*APIResourceList)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.APIResourceList")
+	proto.RegisterType((*APIVersions)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.APIVersions")
+	proto.RegisterType((*DeleteOptions)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.DeleteOptions")
+	proto.RegisterType((*Duration)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.Duration")
+	proto.RegisterType((*ExportOptions)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.ExportOptions")
+	proto.RegisterType((*GetOptions)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.GetOptions")
+	proto.RegisterType((*GroupKind)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.GroupKind")
+	proto.RegisterType((*GroupResource)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.GroupResource")
+	proto.RegisterType((*GroupVersion)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.GroupVersion")
+	proto.RegisterType((*GroupVersionForDiscovery)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.GroupVersionForDiscovery")
+	proto.RegisterType((*GroupVersionKind)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.GroupVersionKind")
+	proto.RegisterType((*GroupVersionResource)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.GroupVersionResource")
+	proto.RegisterType((*Initializer)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.Initializer")
+	proto.RegisterType((*Initializers)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.Initializers")
+	proto.RegisterType((*LabelSelector)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.LabelSelector")
+	proto.RegisterType((*LabelSelectorRequirement)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.LabelSelectorRequirement")
+	proto.RegisterType((*List)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.List")
+	proto.RegisterType((*ListMeta)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.ListMeta")
+	proto.RegisterType((*ListOptions)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.ListOptions")
+	proto.RegisterType((*MicroTime)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.MicroTime")
+	proto.RegisterType((*ObjectMeta)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.ObjectMeta")
+	proto.RegisterType((*OwnerReference)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.OwnerReference")
+	proto.RegisterType((*Patch)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.Patch")
+	proto.RegisterType((*Preconditions)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.Preconditions")
+	proto.RegisterType((*RootPaths)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.RootPaths")
+	proto.RegisterType((*ServerAddressByClientCIDR)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.ServerAddressByClientCIDR")
+	proto.RegisterType((*Status)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.Status")
+	prot
