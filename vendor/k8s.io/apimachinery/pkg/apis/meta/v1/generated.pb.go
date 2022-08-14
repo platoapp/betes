@@ -278,4 +278,154 @@ func init() {
 	proto.RegisterType((*RootPaths)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.RootPaths")
 	proto.RegisterType((*ServerAddressByClientCIDR)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.ServerAddressByClientCIDR")
 	proto.RegisterType((*Status)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.Status")
-	prot
+	proto.RegisterType((*StatusCause)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.StatusCause")
+	proto.RegisterType((*StatusDetails)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.StatusDetails")
+	proto.RegisterType((*Time)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.Time")
+	proto.RegisterType((*Timestamp)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.Timestamp")
+	proto.RegisterType((*TypeMeta)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.TypeMeta")
+	proto.RegisterType((*Verbs)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.Verbs")
+	proto.RegisterType((*WatchEvent)(nil), "k8s.io.apimachinery.pkg.apis.meta.v1.WatchEvent")
+}
+func (m *APIGroup) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *APIGroup) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintGenerated(dAtA, i, uint64(len(m.Name)))
+	i += copy(dAtA[i:], m.Name)
+	if len(m.Versions) > 0 {
+		for _, msg := range m.Versions {
+			dAtA[i] = 0x12
+			i++
+			i = encodeVarintGenerated(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	dAtA[i] = 0x1a
+	i++
+	i = encodeVarintGenerated(dAtA, i, uint64(m.PreferredVersion.Size()))
+	n1, err := m.PreferredVersion.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n1
+	if len(m.ServerAddressByClientCIDRs) > 0 {
+		for _, msg := range m.ServerAddressByClientCIDRs {
+			dAtA[i] = 0x22
+			i++
+			i = encodeVarintGenerated(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func (m *APIGroupList) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *APIGroupList) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Groups) > 0 {
+		for _, msg := range m.Groups {
+			dAtA[i] = 0xa
+			i++
+			i = encodeVarintGenerated(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func (m *APIResource) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *APIResource) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintGenerated(dAtA, i, uint64(len(m.Name)))
+	i += copy(dAtA[i:], m.Name)
+	dAtA[i] = 0x10
+	i++
+	if m.Namespaced {
+		dAtA[i] = 1
+	} else {
+		dAtA[i] = 0
+	}
+	i++
+	dAtA[i] = 0x1a
+	i++
+	i = encodeVarintGenerated(dAtA, i, uint64(len(m.Kind)))
+	i += copy(dAtA[i:], m.Kind)
+	if m.Verbs != nil {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintGenerated(dAtA, i, uint64(m.Verbs.Size()))
+		n2, err := m.Verbs.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n2
+	}
+	if len(m.ShortNames) > 0 {
+		for _, s := range m.ShortNames {
+			dAtA[i] = 0x2a
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			dAtA[i] = uint8(l)
+			i++
+			i += copy(dAtA[i:], s)
+		}
+	}
+	dAtA[i] = 0x32
+	i++
+	i = encodeVarintGenerated(dAtA, i, ui
