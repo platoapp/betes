@@ -1778,4 +1778,190 @@ func (m *APIResourceList) Size() (n int) {
 func (m *APIVersions) Size() (n int) {
 	var l int
 	_ = l
-	if len(m.Versions)
+	if len(m.Versions) > 0 {
+		for _, s := range m.Versions {
+			l = len(s)
+			n += 1 + l + sovGenerated(uint64(l))
+		}
+	}
+	if len(m.ServerAddressByClientCIDRs) > 0 {
+		for _, e := range m.ServerAddressByClientCIDRs {
+			l = e.Size()
+			n += 1 + l + sovGenerated(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *DeleteOptions) Size() (n int) {
+	var l int
+	_ = l
+	if m.GracePeriodSeconds != nil {
+		n += 1 + sovGenerated(uint64(*m.GracePeriodSeconds))
+	}
+	if m.Preconditions != nil {
+		l = m.Preconditions.Size()
+		n += 1 + l + sovGenerated(uint64(l))
+	}
+	if m.OrphanDependents != nil {
+		n += 2
+	}
+	if m.PropagationPolicy != nil {
+		l = len(*m.PropagationPolicy)
+		n += 1 + l + sovGenerated(uint64(l))
+	}
+	return n
+}
+
+func (m *Duration) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovGenerated(uint64(m.Duration))
+	return n
+}
+
+func (m *ExportOptions) Size() (n int) {
+	var l int
+	_ = l
+	n += 2
+	n += 2
+	return n
+}
+
+func (m *GetOptions) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.ResourceVersion)
+	n += 1 + l + sovGenerated(uint64(l))
+	n += 2
+	return n
+}
+
+func (m *GroupKind) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Group)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.Kind)
+	n += 1 + l + sovGenerated(uint64(l))
+	return n
+}
+
+func (m *GroupResource) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Group)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.Resource)
+	n += 1 + l + sovGenerated(uint64(l))
+	return n
+}
+
+func (m *GroupVersion) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Group)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.Version)
+	n += 1 + l + sovGenerated(uint64(l))
+	return n
+}
+
+func (m *GroupVersionForDiscovery) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.GroupVersion)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.Version)
+	n += 1 + l + sovGenerated(uint64(l))
+	return n
+}
+
+func (m *GroupVersionKind) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Group)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.Version)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.Kind)
+	n += 1 + l + sovGenerated(uint64(l))
+	return n
+}
+
+func (m *GroupVersionResource) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Group)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.Version)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.Resource)
+	n += 1 + l + sovGenerated(uint64(l))
+	return n
+}
+
+func (m *Initializer) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Name)
+	n += 1 + l + sovGenerated(uint64(l))
+	return n
+}
+
+func (m *Initializers) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Pending) > 0 {
+		for _, e := range m.Pending {
+			l = e.Size()
+			n += 1 + l + sovGenerated(uint64(l))
+		}
+	}
+	if m.Result != nil {
+		l = m.Result.Size()
+		n += 1 + l + sovGenerated(uint64(l))
+	}
+	return n
+}
+
+func (m *LabelSelector) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.MatchLabels) > 0 {
+		for k, v := range m.MatchLabels {
+			_ = k
+			_ = v
+			mapEntrySize := 1 + len(k) + sovGenerated(uint64(len(k))) + 1 + len(v) + sovGenerated(uint64(len(v)))
+			n += mapEntrySize + 1 + sovGenerated(uint64(mapEntrySize))
+		}
+	}
+	if len(m.MatchExpressions) > 0 {
+		for _, e := range m.MatchExpressions {
+			l = e.Size()
+			n += 1 + l + sovGenerated(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *LabelSelectorRequirement) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Key)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.Operator)
+	n += 1 + l + sovGenerated(uint64(l))
+	if len(m.Values) > 0 {
+		for _, s := range m.Values {
+			l = len(s)
+			n += 1 + l + sovGenerated(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *List) Size() (n int) {
+	var l int
+	_ = l
+	l = m.ListMeta.S
