@@ -1964,4 +1964,168 @@ func (m *LabelSelectorRequirement) Size() (n int) {
 func (m *List) Size() (n int) {
 	var l int
 	_ = l
-	l = m.ListMeta.S
+	l = m.ListMeta.Size()
+	n += 1 + l + sovGenerated(uint64(l))
+	if len(m.Items) > 0 {
+		for _, e := range m.Items {
+			l = e.Size()
+			n += 1 + l + sovGenerated(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *ListMeta) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.SelfLink)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.ResourceVersion)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.Continue)
+	n += 1 + l + sovGenerated(uint64(l))
+	return n
+}
+
+func (m *ListOptions) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.LabelSelector)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.FieldSelector)
+	n += 1 + l + sovGenerated(uint64(l))
+	n += 2
+	l = len(m.ResourceVersion)
+	n += 1 + l + sovGenerated(uint64(l))
+	if m.TimeoutSeconds != nil {
+		n += 1 + sovGenerated(uint64(*m.TimeoutSeconds))
+	}
+	n += 2
+	n += 1 + sovGenerated(uint64(m.Limit))
+	l = len(m.Continue)
+	n += 1 + l + sovGenerated(uint64(l))
+	return n
+}
+
+func (m *ObjectMeta) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Name)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.GenerateName)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.Namespace)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.SelfLink)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.UID)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.ResourceVersion)
+	n += 1 + l + sovGenerated(uint64(l))
+	n += 1 + sovGenerated(uint64(m.Generation))
+	l = m.CreationTimestamp.Size()
+	n += 1 + l + sovGenerated(uint64(l))
+	if m.DeletionTimestamp != nil {
+		l = m.DeletionTimestamp.Size()
+		n += 1 + l + sovGenerated(uint64(l))
+	}
+	if m.DeletionGracePeriodSeconds != nil {
+		n += 1 + sovGenerated(uint64(*m.DeletionGracePeriodSeconds))
+	}
+	if len(m.Labels) > 0 {
+		for k, v := range m.Labels {
+			_ = k
+			_ = v
+			mapEntrySize := 1 + len(k) + sovGenerated(uint64(len(k))) + 1 + len(v) + sovGenerated(uint64(len(v)))
+			n += mapEntrySize + 1 + sovGenerated(uint64(mapEntrySize))
+		}
+	}
+	if len(m.Annotations) > 0 {
+		for k, v := range m.Annotations {
+			_ = k
+			_ = v
+			mapEntrySize := 1 + len(k) + sovGenerated(uint64(len(k))) + 1 + len(v) + sovGenerated(uint64(len(v)))
+			n += mapEntrySize + 1 + sovGenerated(uint64(mapEntrySize))
+		}
+	}
+	if len(m.OwnerReferences) > 0 {
+		for _, e := range m.OwnerReferences {
+			l = e.Size()
+			n += 1 + l + sovGenerated(uint64(l))
+		}
+	}
+	if len(m.Finalizers) > 0 {
+		for _, s := range m.Finalizers {
+			l = len(s)
+			n += 1 + l + sovGenerated(uint64(l))
+		}
+	}
+	l = len(m.ClusterName)
+	n += 1 + l + sovGenerated(uint64(l))
+	if m.Initializers != nil {
+		l = m.Initializers.Size()
+		n += 2 + l + sovGenerated(uint64(l))
+	}
+	return n
+}
+
+func (m *OwnerReference) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Kind)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.Name)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.UID)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.APIVersion)
+	n += 1 + l + sovGenerated(uint64(l))
+	if m.Controller != nil {
+		n += 2
+	}
+	if m.BlockOwnerDeletion != nil {
+		n += 2
+	}
+	return n
+}
+
+func (m *Patch) Size() (n int) {
+	var l int
+	_ = l
+	return n
+}
+
+func (m *Preconditions) Size() (n int) {
+	var l int
+	_ = l
+	if m.UID != nil {
+		l = len(*m.UID)
+		n += 1 + l + sovGenerated(uint64(l))
+	}
+	return n
+}
+
+func (m *RootPaths) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Paths) > 0 {
+		for _, s := range m.Paths {
+			l = len(s)
+			n += 1 + l + sovGenerated(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *ServerAddressByClientCIDR) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.ClientCIDR)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.ServerAddress)
+	n += 1 + l + sovGenerated(uint64(l))
+	return n
+}
+
+func (m *Status) Size() (n int) {
+	var l i
