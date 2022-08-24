@@ -2128,4 +2128,142 @@ func (m *ServerAddressByClientCIDR) Size() (n int) {
 }
 
 func (m *Status) Size() (n int) {
-	var l i
+	var l int
+	_ = l
+	l = m.ListMeta.Size()
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.Status)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.Message)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.Reason)
+	n += 1 + l + sovGenerated(uint64(l))
+	if m.Details != nil {
+		l = m.Details.Size()
+		n += 1 + l + sovGenerated(uint64(l))
+	}
+	n += 1 + sovGenerated(uint64(m.Code))
+	return n
+}
+
+func (m *StatusCause) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Type)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.Message)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.Field)
+	n += 1 + l + sovGenerated(uint64(l))
+	return n
+}
+
+func (m *StatusDetails) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Name)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.Group)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.Kind)
+	n += 1 + l + sovGenerated(uint64(l))
+	if len(m.Causes) > 0 {
+		for _, e := range m.Causes {
+			l = e.Size()
+			n += 1 + l + sovGenerated(uint64(l))
+		}
+	}
+	n += 1 + sovGenerated(uint64(m.RetryAfterSeconds))
+	l = len(m.UID)
+	n += 1 + l + sovGenerated(uint64(l))
+	return n
+}
+
+func (m *Timestamp) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovGenerated(uint64(m.Seconds))
+	n += 1 + sovGenerated(uint64(m.Nanos))
+	return n
+}
+
+func (m *TypeMeta) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Kind)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = len(m.APIVersion)
+	n += 1 + l + sovGenerated(uint64(l))
+	return n
+}
+
+func (m Verbs) Size() (n int) {
+	var l int
+	_ = l
+	if len(m) > 0 {
+		for _, s := range m {
+			l = len(s)
+			n += 1 + l + sovGenerated(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *WatchEvent) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Type)
+	n += 1 + l + sovGenerated(uint64(l))
+	l = m.Object.Size()
+	n += 1 + l + sovGenerated(uint64(l))
+	return n
+}
+
+func sovGenerated(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozGenerated(x uint64) (n int) {
+	return sovGenerated(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (this *APIGroup) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&APIGroup{`,
+		`Name:` + fmt.Sprintf("%v", this.Name) + `,`,
+		`Versions:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Versions), "GroupVersionForDiscovery", "GroupVersionForDiscovery", 1), `&`, ``, 1) + `,`,
+		`PreferredVersion:` + strings.Replace(strings.Replace(this.PreferredVersion.String(), "GroupVersionForDiscovery", "GroupVersionForDiscovery", 1), `&`, ``, 1) + `,`,
+		`ServerAddressByClientCIDRs:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.ServerAddressByClientCIDRs), "ServerAddressByClientCIDR", "ServerAddressByClientCIDR", 1), `&`, ``, 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *APIGroupList) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&APIGroupList{`,
+		`Groups:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Groups), "APIGroup", "APIGroup", 1), `&`, ``, 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *APIResource) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&APIResource{`,
+		`Name:` + fmt.Sprintf("%v", this.Name) + `,`,
+		`Namespaced:` + fmt.Sprintf("%v", this.Namespaced) + `,`,
+		`Kind:` + fmt.Sprintf("%v", this.Kind) + `,`,
+		`Verbs:` + strings.Replace(fmt.Sprintf("%v", this.Verbs), "Verbs", "Verbs", 1) + `,`,
+		`ShortNames:` + fmt.Sprintf("%v", this.ShortNames) + `,`,
+		`SingularName:` + fmt.Sprintf("%v", this.SingularName) + `,`,
+		`Categorie
