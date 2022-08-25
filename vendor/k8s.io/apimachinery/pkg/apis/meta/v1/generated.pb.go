@@ -2377,4 +2377,95 @@ func (this *LabelSelector) String() string {
 	mapStringForMatchLabels += "}"
 	s := strings.Join([]string{`&LabelSelector{`,
 		`MatchLabels:` + mapStringForMatchLabels + `,`,
-		`MatchExpressions:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.MatchExpressions), "LabelSelectorRequirement", "LabelSelectorR
+		`MatchExpressions:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.MatchExpressions), "LabelSelectorRequirement", "LabelSelectorRequirement", 1), `&`, ``, 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *LabelSelectorRequirement) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&LabelSelectorRequirement{`,
+		`Key:` + fmt.Sprintf("%v", this.Key) + `,`,
+		`Operator:` + fmt.Sprintf("%v", this.Operator) + `,`,
+		`Values:` + fmt.Sprintf("%v", this.Values) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *List) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&List{`,
+		`ListMeta:` + strings.Replace(strings.Replace(this.ListMeta.String(), "ListMeta", "ListMeta", 1), `&`, ``, 1) + `,`,
+		`Items:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Items), "RawExtension", "k8s_io_apimachinery_pkg_runtime.RawExtension", 1), `&`, ``, 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *ListMeta) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&ListMeta{`,
+		`SelfLink:` + fmt.Sprintf("%v", this.SelfLink) + `,`,
+		`ResourceVersion:` + fmt.Sprintf("%v", this.ResourceVersion) + `,`,
+		`Continue:` + fmt.Sprintf("%v", this.Continue) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *ListOptions) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&ListOptions{`,
+		`LabelSelector:` + fmt.Sprintf("%v", this.LabelSelector) + `,`,
+		`FieldSelector:` + fmt.Sprintf("%v", this.FieldSelector) + `,`,
+		`Watch:` + fmt.Sprintf("%v", this.Watch) + `,`,
+		`ResourceVersion:` + fmt.Sprintf("%v", this.ResourceVersion) + `,`,
+		`TimeoutSeconds:` + valueToStringGenerated(this.TimeoutSeconds) + `,`,
+		`IncludeUninitialized:` + fmt.Sprintf("%v", this.IncludeUninitialized) + `,`,
+		`Limit:` + fmt.Sprintf("%v", this.Limit) + `,`,
+		`Continue:` + fmt.Sprintf("%v", this.Continue) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *ObjectMeta) String() string {
+	if this == nil {
+		return "nil"
+	}
+	keysForLabels := make([]string, 0, len(this.Labels))
+	for k := range this.Labels {
+		keysForLabels = append(keysForLabels, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForLabels)
+	mapStringForLabels := "map[string]string{"
+	for _, k := range keysForLabels {
+		mapStringForLabels += fmt.Sprintf("%v: %v,", k, this.Labels[k])
+	}
+	mapStringForLabels += "}"
+	keysForAnnotations := make([]string, 0, len(this.Annotations))
+	for k := range this.Annotations {
+		keysForAnnotations = append(keysForAnnotations, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForAnnotations)
+	mapStringForAnnotations := "map[string]string{"
+	for _, k := range keysForAnnotations {
+		mapStringForAnnotations += fmt.Sprintf("%v: %v,", k, this.Annotations[k])
+	}
+	mapStringForAnnotations += "}"
+	s := strings.Join([]string{`&ObjectMeta{`,
+		`Name:` + fmt.Sprintf("%v", this.Name) + `,`,
+		`GenerateName:` + fmt.Sprintf("%v", this.GenerateName) + `,`,
+		`Namespace:` + fmt.Sprintf("%v", this.Namespace) + `,`,
+		`SelfLink:` + fmt.Sprintf("%v", this.SelfLink) + `,`,
+		`UID:` + fmt.Sprintf("%v", this.UID) + `,`,
+		`ResourceVersion:` + fmt.Sprintf("%v", this.ResourceVersion) + `,`,
+		`Generation:` + fmt.Sprintf("%v", this.Generation) + `,`,
+		`CreationTimestamp:` + strings.Replace(strings.Replace(this.CreationTimestamp.String(), "Time", "Time", 1), `&`, ``, 1) + `,`,
+		`DeletionTimestamp:` + strings.Replace(fmt.Sprintf("%v", this.DeletionTimestamp), "Time", "Time", 1) + `,`,
+		`DeletionGracePeriodSeconds:` + valu
