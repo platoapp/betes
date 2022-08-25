@@ -2468,4 +2468,112 @@ func (this *ObjectMeta) String() string {
 		`Generation:` + fmt.Sprintf("%v", this.Generation) + `,`,
 		`CreationTimestamp:` + strings.Replace(strings.Replace(this.CreationTimestamp.String(), "Time", "Time", 1), `&`, ``, 1) + `,`,
 		`DeletionTimestamp:` + strings.Replace(fmt.Sprintf("%v", this.DeletionTimestamp), "Time", "Time", 1) + `,`,
-		`DeletionGracePeriodSeconds:` + valu
+		`DeletionGracePeriodSeconds:` + valueToStringGenerated(this.DeletionGracePeriodSeconds) + `,`,
+		`Labels:` + mapStringForLabels + `,`,
+		`Annotations:` + mapStringForAnnotations + `,`,
+		`OwnerReferences:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.OwnerReferences), "OwnerReference", "OwnerReference", 1), `&`, ``, 1) + `,`,
+		`Finalizers:` + fmt.Sprintf("%v", this.Finalizers) + `,`,
+		`ClusterName:` + fmt.Sprintf("%v", this.ClusterName) + `,`,
+		`Initializers:` + strings.Replace(fmt.Sprintf("%v", this.Initializers), "Initializers", "Initializers", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *OwnerReference) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&OwnerReference{`,
+		`Kind:` + fmt.Sprintf("%v", this.Kind) + `,`,
+		`Name:` + fmt.Sprintf("%v", this.Name) + `,`,
+		`UID:` + fmt.Sprintf("%v", this.UID) + `,`,
+		`APIVersion:` + fmt.Sprintf("%v", this.APIVersion) + `,`,
+		`Controller:` + valueToStringGenerated(this.Controller) + `,`,
+		`BlockOwnerDeletion:` + valueToStringGenerated(this.BlockOwnerDeletion) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *Patch) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&Patch{`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *Preconditions) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&Preconditions{`,
+		`UID:` + valueToStringGenerated(this.UID) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *RootPaths) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&RootPaths{`,
+		`Paths:` + fmt.Sprintf("%v", this.Paths) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *ServerAddressByClientCIDR) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&ServerAddressByClientCIDR{`,
+		`ClientCIDR:` + fmt.Sprintf("%v", this.ClientCIDR) + `,`,
+		`ServerAddress:` + fmt.Sprintf("%v", this.ServerAddress) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *Status) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&Status{`,
+		`ListMeta:` + strings.Replace(strings.Replace(this.ListMeta.String(), "ListMeta", "ListMeta", 1), `&`, ``, 1) + `,`,
+		`Status:` + fmt.Sprintf("%v", this.Status) + `,`,
+		`Message:` + fmt.Sprintf("%v", this.Message) + `,`,
+		`Reason:` + fmt.Sprintf("%v", this.Reason) + `,`,
+		`Details:` + strings.Replace(fmt.Sprintf("%v", this.Details), "StatusDetails", "StatusDetails", 1) + `,`,
+		`Code:` + fmt.Sprintf("%v", this.Code) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *StatusCause) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&StatusCause{`,
+		`Type:` + fmt.Sprintf("%v", this.Type) + `,`,
+		`Message:` + fmt.Sprintf("%v", this.Message) + `,`,
+		`Field:` + fmt.Sprintf("%v", this.Field) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *StatusDetails) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&StatusDetails{`,
+		`Name:` + fmt.Sprintf("%v", this.Name) + `,`,
+		`Group:` + fmt.Sprintf("%v", this.Group) + `,`,
+		`Kind:` + fmt.Sprintf("%v", this.Kind) + `,`,
+		`Causes:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Causes), "StatusCause", "StatusCause", 1), `&`, ``, 1) + `,`,
+		`RetryAfterSeconds:` + fmt.Sprintf("%v", this.RetryAfterSeconds) + `,`,
+		`UID:` + fmt.Sprintf("%v", this.UID) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *Timestamp) String() string {
