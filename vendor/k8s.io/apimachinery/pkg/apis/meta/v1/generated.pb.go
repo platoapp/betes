@@ -2266,4 +2266,115 @@ func (this *APIResource) String() string {
 		`Verbs:` + strings.Replace(fmt.Sprintf("%v", this.Verbs), "Verbs", "Verbs", 1) + `,`,
 		`ShortNames:` + fmt.Sprintf("%v", this.ShortNames) + `,`,
 		`SingularName:` + fmt.Sprintf("%v", this.SingularName) + `,`,
-		`Categorie
+		`Categories:` + fmt.Sprintf("%v", this.Categories) + `,`,
+		`Group:` + fmt.Sprintf("%v", this.Group) + `,`,
+		`Version:` + fmt.Sprintf("%v", this.Version) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *APIResourceList) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&APIResourceList{`,
+		`GroupVersion:` + fmt.Sprintf("%v", this.GroupVersion) + `,`,
+		`APIResources:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.APIResources), "APIResource", "APIResource", 1), `&`, ``, 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *DeleteOptions) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&DeleteOptions{`,
+		`GracePeriodSeconds:` + valueToStringGenerated(this.GracePeriodSeconds) + `,`,
+		`Preconditions:` + strings.Replace(fmt.Sprintf("%v", this.Preconditions), "Preconditions", "Preconditions", 1) + `,`,
+		`OrphanDependents:` + valueToStringGenerated(this.OrphanDependents) + `,`,
+		`PropagationPolicy:` + valueToStringGenerated(this.PropagationPolicy) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *Duration) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&Duration{`,
+		`Duration:` + fmt.Sprintf("%v", this.Duration) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *ExportOptions) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&ExportOptions{`,
+		`Export:` + fmt.Sprintf("%v", this.Export) + `,`,
+		`Exact:` + fmt.Sprintf("%v", this.Exact) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *GetOptions) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&GetOptions{`,
+		`ResourceVersion:` + fmt.Sprintf("%v", this.ResourceVersion) + `,`,
+		`IncludeUninitialized:` + fmt.Sprintf("%v", this.IncludeUninitialized) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *GroupVersionForDiscovery) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&GroupVersionForDiscovery{`,
+		`GroupVersion:` + fmt.Sprintf("%v", this.GroupVersion) + `,`,
+		`Version:` + fmt.Sprintf("%v", this.Version) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *Initializer) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&Initializer{`,
+		`Name:` + fmt.Sprintf("%v", this.Name) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *Initializers) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&Initializers{`,
+		`Pending:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Pending), "Initializer", "Initializer", 1), `&`, ``, 1) + `,`,
+		`Result:` + strings.Replace(fmt.Sprintf("%v", this.Result), "Status", "Status", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *LabelSelector) String() string {
+	if this == nil {
+		return "nil"
+	}
+	keysForMatchLabels := make([]string, 0, len(this.MatchLabels))
+	for k := range this.MatchLabels {
+		keysForMatchLabels = append(keysForMatchLabels, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForMatchLabels)
+	mapStringForMatchLabels := "map[string]string{"
+	for _, k := range keysForMatchLabels {
+		mapStringForMatchLabels += fmt.Sprintf("%v: %v,", k, this.MatchLabels[k])
+	}
+	mapStringForMatchLabels += "}"
+	s := strings.Join([]string{`&LabelSelector{`,
+		`MatchLabels:` + mapStringForMatchLabels + `,`,
+		`MatchExpressions:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.MatchExpressions), "LabelSelectorRequirement", "LabelSelectorR
