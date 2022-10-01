@@ -794,3 +794,144 @@ type APIGroup struct {
 type ServerAddressByClientCIDR struct {
 	// The CIDR with which clients can match their IP to figure out the server address that they should use.
 	ClientCIDR string `json:"clientCIDR" protobuf:"bytes,1,opt,name=clientCIDR"`
+	// Address of this server, suitable for a client that matches the above CIDR.
+	// This can be a hostname, hostname:port, IP or IP:port.
+	ServerAddress string `json:"serverAddress" protobuf:"bytes,2,opt,name=serverAddress"`
+}
+
+// GroupVersion contains the "group/version" and "version" string of a version.
+// It is made a struct to keep extensibility.
+type GroupVersionForDiscovery struct {
+	// groupVersion specifies the API group and version in the form "group/version"
+	GroupVersion string `json:"groupVersion" protobuf:"bytes,1,opt,name=groupVersion"`
+	// version specifies the version in the form of "version". This is to save
+	// the clients the trouble of splitting the GroupVersion.
+	Version string `json:"version" protobuf:"bytes,2,opt,name=version"`
+}
+
+// APIResource specifies the name of a resource and whether it is namespaced.
+type APIResource struct {
+	// name is the plural name of the resource.
+	Name string `json:"name" protobuf:"bytes,1,opt,name=name"`
+	// singularName is the singular name of the resource.  This allows clients to handle plural and singular opaquely.
+	// The singularName is more correct for reporting status on a single item and both singular and plural are allowed
+	// from the kubectl CLI interface.
+	SingularName string `json:"singularName" protobuf:"bytes,6,opt,name=singularName"`
+	// namespaced indicates if a resource is namespaced or not.
+	Namespaced bool `json:"namespaced" protobuf:"varint,2,opt,name=namespaced"`
+	// group is the preferred group of the resource.  Empty implies the group of the containing resource list.
+	// For subresources, this may have a different value, for example: Scale".
+	Group string `json:"group,omitempty" protobuf:"bytes,8,opt,name=group"`
+	// version is the preferred version of the resource.  Empty implies the version of the containing resource list
+	// For subresources, this may have a different value, for example: v1 (while inside a v1beta1 version of the core resource's group)".
+	Version string `json:"version,omitempty" protobuf:"bytes,9,opt,name=version"`
+	// kind is the kind for the resource (e.g. 'Foo' is the kind for a resource 'foo')
+	Kind string `json:"kind" protobuf:"bytes,3,opt,name=kind"`
+	// verbs is a list of supported kube verbs (this includes get, list, watch, create,
+	// update, patch, delete, deletecollection, and proxy)
+	Verbs Verbs `json:"verbs" protobuf:"bytes,4,opt,name=verbs"`
+	// shortNames is a list of suggested short names of the resource.
+	ShortNames []string `json:"shortNames,omitempty" protobuf:"bytes,5,rep,name=shortNames"`
+	// categories is a list of the grouped resources this resource belongs to (e.g. 'all')
+	Categories []string `json:"categories,omitempty" protobuf:"bytes,7,rep,name=categories"`
+}
+
+// Verbs masks the value so protobuf can generate
+//
+// +protobuf.nullable=true
+// +protobuf.options.(gogoproto.goproto_stringer)=false
+type Verbs []string
+
+func (vs Verbs) String() string {
+	return fmt.Sprintf("%v", []string(vs))
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// APIResourceList is a list of APIResource, it is used to expose the name of the
+// resources supported in a specific group and version, and if the resource
+// is namespaced.
+type APIResourceList struct {
+	TypeMeta `json:",inline"`
+	// groupVersion is the group and version this APIResourceList is for.
+	GroupVersion string `json:"groupVersion" protobuf:"bytes,1,opt,name=groupVersion"`
+	// resources contains the name of the resources and if they are namespaced.
+	APIResources []APIResource `json:"resources" protobuf:"bytes,2,rep,name=resources"`
+}
+
+// RootPaths lists the paths available at root.
+// For example: "/healthz", "/apis".
+type RootPaths struct {
+	// paths are the paths available at root.
+	Paths []string `json:"paths" protobuf:"bytes,1,rep,name=paths"`
+}
+
+// TODO: remove me when watch is refactored
+func LabelSelectorQueryParam(version string) string {
+	return "labelSelector"
+}
+
+// TODO: remove me when watch is refactored
+func FieldSelectorQueryParam(version string) string {
+	return "fieldSelector"
+}
+
+// String returns available api versions as a human-friendly version string.
+func (apiVersions APIVersions) String() string {
+	return strings.Join(apiVersions.Versions, ",")
+}
+
+func (apiVersions APIVersions) GoString() string {
+	return apiVersions.String()
+}
+
+// Patch is provided to give a concrete name and type to the Kubernetes PATCH request body.
+type Patch struct{}
+
+// Note:
+// There are two different styles of label selectors used in versioned types:
+// an older style which is represented as just a string in versioned types, and a
+// newer style that is structured.  LabelSelector is an internal representation for the
+// latter style.
+
+// A label selector is a label query over a set of resources. The result of matchLabels and
+// matchExpressions are ANDed. An empty label selector matches all objects. A null
+// label selector matches no objects.
+type LabelSelector struct {
+	// matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+	// map is equivalent to an element of matchExpressions, whose key field is "key", the
+	// operator is "In", and the values array contains only "value". The requirements are ANDed.
+	// +optional
+	MatchLabels map[string]string `json:"matchLabels,omitempty" protobuf:"bytes,1,rep,name=matchLabels"`
+	// matchExpressions is a list of label selector requirements. The requirements are ANDed.
+	// +optional
+	MatchExpressions []LabelSelectorRequirement `json:"matchExpressions,omitempty" protobuf:"bytes,2,rep,name=matchExpressions"`
+}
+
+// A label selector requirement is a selector that contains values, a key, and an operator that
+// relates the key and values.
+type LabelSelectorRequirement struct {
+	// key is the label key that the selector applies to.
+	// +patchMergeKey=key
+	// +patchStrategy=merge
+	Key string `json:"key" patchStrategy:"merge" patchMergeKey:"key" protobuf:"bytes,1,opt,name=key"`
+	// operator represents a key's relationship to a set of values.
+	// Valid operators are In, NotIn, Exists and DoesNotExist.
+	Operator LabelSelectorOperator `json:"operator" protobuf:"bytes,2,opt,name=operator,casttype=LabelSelectorOperator"`
+	// values is an array of string values. If the operator is In or NotIn,
+	// the values array must be non-empty. If the operator is Exists or DoesNotExist,
+	// the values array must be empty. This array is replaced during a strategic
+	// merge patch.
+	// +optional
+	Values []string `json:"values,omitempty" protobuf:"bytes,3,rep,name=values"`
+}
+
+// A label selector operator is the set of operators that can be used in a selector requirement.
+type LabelSelectorOperator string
+
+const (
+	LabelSelectorOpIn           LabelSelectorOperator = "In"
+	LabelSelectorOpNotIn        LabelSelectorOperator = "NotIn"
+	LabelSelectorOpExists       LabelSelectorOperator = "Exists"
+	LabelSelectorOpDoesNotExist LabelSelectorOperator = "DoesNotExist"
+)
