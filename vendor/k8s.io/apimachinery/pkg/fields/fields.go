@@ -42,4 +42,21 @@ func (ls Set) String() string {
 	}
 	// Sort for determinism.
 	sort.StringSlice(selector).Sort()
-	return stri
+	return strings.Join(selector, ",")
+}
+
+// Has returns whether the provided field exists in the map.
+func (ls Set) Has(field string) bool {
+	_, exists := ls[field]
+	return exists
+}
+
+// Get returns the value in the map for the provided field.
+func (ls Set) Get(field string) string {
+	return ls[field]
+}
+
+// AsSelector converts fields into a selectors.
+func (ls Set) AsSelector() Selector {
+	return SelectorFromSet(ls)
+}
