@@ -135,4 +135,86 @@ type StorageSerializer interface {
 	// SupportedMediaTypes are the media types supported for reading and writing objects.
 	SupportedMediaTypes() []SerializerInfo
 
-	// UniversalDeserializer returns a Seriali
+	// UniversalDeserializer returns a Serializer that can read objects in multiple supported formats
+	// by introspecting the data at rest.
+	UniversalDeserializer() Decoder
+
+	// EncoderForVersion returns an encoder that ensures objects being written to the provided
+	// serializer are in the provided group version.
+	EncoderForVersion(serializer Encoder, gv GroupVersioner) Encoder
+	// DecoderForVersion returns a decoder that ensures objects being read by the provided
+	// serializer are in the provided group version by default.
+	DecoderToVersion(serializer Decoder, gv GroupVersioner) Decoder
+}
+
+// NestedObjectEncoder is an optional interface that objects may implement to be given
+// an opportunity to encode any nested Objects / RawExtensions during serialization.
+type NestedObjectEncoder interface {
+	EncodeNestedObjects(e Encoder) error
+}
+
+// NestedObjectDecoder is an optional interface that objects may implement to be given
+// an opportunity to decode any nested Objects / RawExtensions during serialization.
+type NestedObjectDecoder interface {
+	DecodeNestedObjects(d Decoder) error
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Non-codec interfaces
+
+type ObjectDefaulter interface {
+	// Default takes an object (must be a pointer) and applies any default values.
+	// Defaulters may not error.
+	Default(in Object)
+}
+
+type ObjectVersioner interface {
+	ConvertToVersion(in Object, gv GroupVersioner) (out Object, err error)
+}
+
+// ObjectConvertor converts an object to a different version.
+type ObjectConvertor interface {
+	// Convert attempts to convert one object into another, or returns an error. This method does
+	// not guarantee the in object is not mutated. The context argument will be passed to
+	// all nested conversions.
+	Convert(in, out, context interface{}) error
+	// ConvertToVersion takes the provided object and converts it the provided version. This
+	// method does not guarantee that the in object is not mutated. This method is similar to
+	// Convert() but handles specific details of choosing the correct output version.
+	ConvertToVersion(in Object, gv GroupVersioner) (out Object, err error)
+	ConvertFieldLabel(version, kind, label, value string) (string, string, error)
+}
+
+// ObjectTyper contains methods for extracting the APIVersion and Kind
+// of objects.
+type ObjectTyper interface {
+	// ObjectKinds returns the all possible group,version,kind of the provided object, true if
+	// the object is unversioned, or an error if the object is not recognized
+	// (IsNotRegisteredError will return true).
+	ObjectKinds(Object) ([]schema.GroupVersionKind, bool, error)
+	// Recognizes returns true if the scheme is able to handle the provided version and kind,
+	// or more precisely that the provided version is a possible conversion or decoding
+	// target.
+	Recognizes(gvk schema.GroupVersionKind) bool
+}
+
+// ObjectCreater contains methods for instantiating an object by kind and version.
+type ObjectCreater interface {
+	New(kind schema.GroupVersionKind) (out Object, err error)
+}
+
+// ResourceVersioner provides methods for setting and retrieving
+// the resource version from an API object.
+type ResourceVersioner interface {
+	SetResourceVersion(obj Object, version string) error
+	ResourceVersion(obj Object) (string, error)
+}
+
+// SelfLinker provides methods for setting and retrieving the SelfLink field of an API object.
+type SelfLinker interface {
+	SetSelfLink(obj Object, selfLink string) error
+	SelfLink(obj Object) (string, error)
+
+	// Knowing Name is sometimes necessary to use a SelfLinker.
+	Name(obj Object) (string, error)
+	// Knowing Namespace 
