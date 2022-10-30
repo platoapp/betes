@@ -217,4 +217,33 @@ type SelfLinker interface {
 
 	// Knowing Name is sometimes necessary to use a SelfLinker.
 	Name(obj Object) (string, error)
-	// Knowing Namespace 
+	// Knowing Namespace is sometimes necessary to use a SelfLinker
+	Namespace(obj Object) (string, error)
+}
+
+// All API types registered with Scheme must support the Object interface. Since objects in a scheme are
+// expected to be serialized to the wire, the interface an Object must provide to the Scheme allows
+// serializers to set the kind, version, and group the object is represented as. An Object may choose
+// to return a no-op ObjectKindAccessor in cases where it is not expected to be serialized.
+type Object interface {
+	GetObjectKind() schema.ObjectKind
+	DeepCopyObject() Object
+}
+
+// Unstructured objects store values as map[string]interface{}, with only values that can be serialized
+// to JSON allowed.
+type Unstructured interface {
+	Object
+	// UnstructuredContent returns a non-nil, mutable map of the contents of this object. Values may be
+	// []interface{}, map[string]interface{}, or any primitive type. Contents are typically serialized to
+	// and from JSON.
+	UnstructuredContent() map[string]interface{}
+	// SetUnstructuredContent updates the object content to match the provided map.
+	SetUnstructuredContent(map[string]interface{})
+	// IsList returns true if this type is a list or matches the list convention - has an array called "items".
+	IsList() bool
+	// EachListItem should pass a single item out of the list as an Object to the provided function. Any
+	// error should terminate the iteration. If IsList() returns false, this method should return an error
+	// instead of calling the provided function.
+	EachListItem(func(Object) error) error
+}
