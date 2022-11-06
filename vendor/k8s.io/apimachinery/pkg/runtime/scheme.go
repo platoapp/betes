@@ -10,4 +10,85 @@ You may obtain a copy of the License at
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See 
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package runtime
+
+import (
+	"fmt"
+	"net/url"
+	"reflect"
+
+	"k8s.io/apimachinery/pkg/conversion"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+)
+
+// Scheme defines methods for serializing and deserializing API objects, a type
+// registry for converting group, version, and kind information to and from Go
+// schemas, and mappings between Go schemas of different versions. A scheme is the
+// foundation for a versioned API and versioned configuration over time.
+//
+// In a Scheme, a Type is a particular Go struct, a Version is a point-in-time
+// identifier for a particular representation of that Type (typically backwards
+// compatible), a Kind is the unique name for that Type within the Version, and a
+// Group identifies a set of Versions, Kinds, and Types that evolve over time. An
+// Unversioned Type is one that is not yet formally bound to a type and is promised
+// to be backwards compatible (effectively a "v1" of a Type that does not expect
+// to break in the future).
+//
+// Schemes are not expected to change at runtime and are only threadsafe after
+// registration is complete.
+type Scheme struct {
+	// versionMap allows one to figure out the go type of an object with
+	// the given version and name.
+	gvkToType map[schema.GroupVersionKind]reflect.Type
+
+	// typeToGroupVersion allows one to find metadata for a given go object.
+	// The reflect.Type we index by should *not* be a pointer.
+	typeToGVK map[reflect.Type][]schema.GroupVersionKind
+
+	// unversionedTypes are transformed without conversion in ConvertToVersion.
+	unversionedTypes map[reflect.Type]schema.GroupVersionKind
+
+	// unversionedKinds are the names of kinds that can be created in the context of any group
+	// or version
+	// TODO: resolve the status of unversioned types.
+	unversionedKinds map[string]reflect.Type
+
+	// Map from version and resource to the corresponding func to convert
+	// resource field labels in that version to internal version.
+	fieldLabelConversionFuncs map[string]map[string]FieldLabelConversionFunc
+
+	// defaulterFuncs is an array of interfaces to be called with an object to provide defaulting
+	// the provided object must be a pointer.
+	defaulterFuncs map[reflect.Type]func(interface{})
+
+	// converter stores all registered conversion functions. It also has
+	// default coverting behavior.
+	converter *conversion.Converter
+}
+
+// Function to convert a field selector to internal representation.
+type FieldLabelConversionFunc func(label, value string) (internalLabel, internalValue string, err error)
+
+// NewScheme creates a new Scheme. This scheme is pluggable by default.
+func NewScheme() *Scheme {
+	s := &Scheme{
+		gvkToType:                 map[schema.GroupVersionKind]reflect.Type{},
+		typeToGVK:                 map[reflect.Type][]schema.GroupVersionKind{},
+		unversionedTypes:          map[reflect.Type]schema.GroupVersionKind{},
+		unversionedKinds:          map[string]reflect.Type{},
+		fieldLabelConversionFuncs: map[string]map[string]FieldLabelConversionFunc{},
+		defaulterFuncs:            map[reflect.Type]func(interface{}){},
+	}
+	s.converter = conversion.NewConverter(s.nameFunc)
+
+	s.AddConversionFuncs(DefaultEmbeddedConversions()...)
+
+	// Enable map[string][]string conversions by default
+	if err := s.AddConversionFuncs(DefaultStringConversions...); err != nil {
+		panic(err)
+	}
+	if err := s.RegisterInputDefaults(&map[string][]string{}, JSONKeyMapper, conversion.AllowDifferentFieldTypeNam
