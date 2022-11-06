@@ -175,4 +175,116 @@ func (s *Scheme) AddKnownTypes(gv schema.GroupVersion, types ...Object) {
 func (s *Scheme) AddKnownTypeWithName(gvk schema.GroupVersionKind, obj Object) {
 	t := reflect.TypeOf(obj)
 	if len(gvk.Version) == 0 {
-		panic(fmt.S
+		panic(fmt.Sprintf("version is required on all types: %s %v", gvk, t))
+	}
+	if t.Kind() != reflect.Ptr {
+		panic("All types must be pointers to structs.")
+	}
+	t = t.Elem()
+	if t.Kind() != reflect.Struct {
+		panic("All types must be pointers to structs.")
+	}
+
+	if oldT, found := s.gvkToType[gvk]; found && oldT != t {
+		panic(fmt.Sprintf("Double registration of different types for %v: old=%v.%v, new=%v.%v", gvk, oldT.PkgPath(), oldT.Name(), t.PkgPath(), t.Name()))
+	}
+
+	s.gvkToType[gvk] = t
+
+	for _, existingGvk := range s.typeToGVK[t] {
+		if existingGvk == gvk {
+			return
+		}
+	}
+	s.typeToGVK[t] = append(s.typeToGVK[t], gvk)
+}
+
+// KnownTypes returns the types known for the given version.
+func (s *Scheme) KnownTypes(gv schema.GroupVersion) map[string]reflect.Type {
+	types := make(map[string]reflect.Type)
+	for gvk, t := range s.gvkToType {
+		if gv != gvk.GroupVersion() {
+			continue
+		}
+
+		types[gvk.Kind] = t
+	}
+	return types
+}
+
+// AllKnownTypes returns the all known types.
+func (s *Scheme) AllKnownTypes() map[schema.GroupVersionKind]reflect.Type {
+	return s.gvkToType
+}
+
+// ObjectKinds returns all possible group,version,kind of the go object, true if the
+// object is considered unversioned, or an error if it's not a pointer or is unregistered.
+func (s *Scheme) ObjectKinds(obj Object) ([]schema.GroupVersionKind, bool, error) {
+	// Unstructured objects are always considered to have their declared GVK
+	if _, ok := obj.(Unstructured); ok {
+		// we require that the GVK be populated in order to recognize the object
+		gvk := obj.GetObjectKind().GroupVersionKind()
+		if len(gvk.Kind) == 0 {
+			return nil, false, NewMissingKindErr("unstructured object has no kind")
+		}
+		if len(gvk.Version) == 0 {
+			return nil, false, NewMissingVersionErr("unstructured object has no version")
+		}
+		return []schema.GroupVersionKind{gvk}, false, nil
+	}
+
+	v, err := conversion.EnforcePtr(obj)
+	if err != nil {
+		return nil, false, err
+	}
+	t := v.Type()
+
+	gvks, ok := s.typeToGVK[t]
+	if !ok {
+		return nil, false, NewNotRegisteredErrForType(t)
+	}
+	_, unversionedType := s.unversionedTypes[t]
+
+	return gvks, unversionedType, nil
+}
+
+// Recognizes returns true if the scheme is able to handle the provided group,version,kind
+// of an object.
+func (s *Scheme) Recognizes(gvk schema.GroupVersionKind) bool {
+	_, exists := s.gvkToType[gvk]
+	return exists
+}
+
+func (s *Scheme) IsUnversioned(obj Object) (bool, bool) {
+	v, err := conversion.EnforcePtr(obj)
+	if err != nil {
+		return false, false
+	}
+	t := v.Type()
+
+	if _, ok := s.typeToGVK[t]; !ok {
+		return false, false
+	}
+	_, ok := s.unversionedTypes[t]
+	return ok, true
+}
+
+// New returns a new API object of the given version and name, or an error if it hasn't
+// been registered. The version and kind fields must be specified.
+func (s *Scheme) New(kind schema.GroupVersionKind) (Object, error) {
+	if t, exists := s.gvkToType[kind]; exists {
+		return reflect.New(t).Interface().(Object), nil
+	}
+
+	if t, exists := s.unversionedKinds[kind.Kind]; exists {
+		return reflect.New(t).Interface().(Object), nil
+	}
+	return nil, NewNotRegisteredErrForKind(kind)
+}
+
+// AddGenericConversionFunc adds a function that accepts the ConversionFunc call pattern
+// (for two conversion types) to the converter. These functions are checked first during
+// a normal conversion, but are otherwise not called. Use AddConversionFuncs when registering
+// typed conversions.
+func (s *Scheme) AddGenericConversionFunc(fn conversion.GenericConversionFunc) {
+	s.converter.AddGenericConv
