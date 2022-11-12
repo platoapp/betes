@@ -367,4 +367,77 @@ func (s *Scheme) AddFieldLabelConversionFunc(version, kind string, conversionFun
 // or renamed struct field without writing an entire conversion function. See
 // the comment in conversion.Converter.SetStructFieldCopy for parameter details.
 // Call as many times as needed, even on the same fields.
-func (s *Scheme) AddStructFieldCon
+func (s *Scheme) AddStructFieldConversion(srcFieldType interface{}, srcFieldName string, destFieldType interface{}, destFieldName string) error {
+	return s.converter.SetStructFieldCopy(srcFieldType, srcFieldName, destFieldType, destFieldName)
+}
+
+// RegisterInputDefaults sets the provided field mapping function and field matching
+// as the defaults for the provided input type.  The fn may be nil, in which case no
+// mapping will happen by default. Use this method to register a mechanism for handling
+// a specific input type in conversion, such as a map[string]string to structs.
+func (s *Scheme) RegisterInputDefaults(in interface{}, fn conversion.FieldMappingFunc, defaultFlags conversion.FieldMatchingFlags) error {
+	return s.converter.RegisterInputDefaults(in, fn, defaultFlags)
+}
+
+// AddTypeDefaultingFuncs registers a function that is passed a pointer to an
+// object and can default fields on the object. These functions will be invoked
+// when Default() is called. The function will never be called unless the
+// defaulted object matches srcType. If this function is invoked twice with the
+// same srcType, the fn passed to the later call will be used instead.
+func (s *Scheme) AddTypeDefaultingFunc(srcType Object, fn func(interface{})) {
+	s.defaulterFuncs[reflect.TypeOf(srcType)] = fn
+}
+
+// Default sets defaults on the provided Object.
+func (s *Scheme) Default(src Object) {
+	if fn, ok := s.defaulterFuncs[reflect.TypeOf(src)]; ok {
+		fn(src)
+	}
+}
+
+// Convert will attempt to convert in into out. Both must be pointers. For easy
+// testing of conversion functions. Returns an error if the conversion isn't
+// possible. You can call this with types that haven't been registered (for example,
+// a to test conversion of types that are nested within registered types). The
+// context interface is passed to the convertor. Convert also supports Unstructured
+// types and will convert them intelligently.
+func (s *Scheme) Convert(in, out interface{}, context interface{}) error {
+	unstructuredIn, okIn := in.(Unstructured)
+	unstructuredOut, okOut := out.(Unstructured)
+	switch {
+	case okIn && okOut:
+		// converting unstructured input to an unstructured output is a straight copy - unstructured
+		// is a "smart holder" and the contents are passed by reference between the two objects
+		unstructuredOut.SetUnstructuredContent(unstructuredIn.UnstructuredContent())
+		return nil
+
+	case okOut:
+		// if the output is an unstructured object, use the standard Go type to unstructured
+		// conversion. The object must not be internal.
+		obj, ok := in.(Object)
+		if !ok {
+			return fmt.Errorf("unable to convert object type %T to Unstructured, must be a runtime.Object", in)
+		}
+		gvks, unversioned, err := s.ObjectKinds(obj)
+		if err != nil {
+			return err
+		}
+		gvk := gvks[0]
+
+		// if no conversion is necessary, convert immediately
+		if unversioned || gvk.Version != APIVersionInternal {
+			content, err := DefaultUnstructuredConverter.ToUnstructured(in)
+			if err != nil {
+				return err
+			}
+			unstructuredOut.SetUnstructuredContent(content)
+			return nil
+		}
+
+		// attempt to convert the object to an external version first.
+		target, ok := context.(GroupVersioner)
+		if !ok {
+			return fmt.Errorf("unable to convert the internal object type %T to Unstructured without providing a preferred version to convert to", in)
+		}
+		// Convert is implicitly unsafe, so we don't need to perform a safe conversion
+		versioned, err := s.
