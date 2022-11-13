@@ -440,4 +440,98 @@ func (s *Scheme) Convert(in, out interface{}, context interface{}) error {
 			return fmt.Errorf("unable to convert the internal object type %T to Unstructured without providing a preferred version to convert to", in)
 		}
 		// Convert is implicitly unsafe, so we don't need to perform a safe conversion
-		versioned, err := s.
+		versioned, err := s.UnsafeConvertToVersion(obj, target)
+		if err != nil {
+			return err
+		}
+		content, err := DefaultUnstructuredConverter.ToUnstructured(versioned)
+		if err != nil {
+			return err
+		}
+		unstructuredOut.SetUnstructuredContent(content)
+		return nil
+
+	case okIn:
+		// converting an unstructured object to any type is modeled by first converting
+		// the input to a versioned type, then running standard conversions
+		typed, err := s.unstructuredToTyped(unstructuredIn)
+		if err != nil {
+			return err
+		}
+		in = typed
+	}
+
+	flags, meta := s.generateConvertMeta(in)
+	meta.Context = context
+	if flags == 0 {
+		flags = conversion.AllowDifferentFieldTypeNames
+	}
+	return s.converter.Convert(in, out, flags, meta)
+}
+
+// ConvertFieldLabel alters the given field label and value for an kind field selector from
+// versioned representation to an unversioned one or returns an error.
+func (s *Scheme) ConvertFieldLabel(version, kind, label, value string) (string, string, error) {
+	if s.fieldLabelConversionFuncs[version] == nil {
+		return DefaultMetaV1FieldSelectorConversion(label, value)
+	}
+	conversionFunc, ok := s.fieldLabelConversionFuncs[version][kind]
+	if !ok {
+		return DefaultMetaV1FieldSelectorConversion(label, value)
+	}
+	return conversionFunc(label, value)
+}
+
+// ConvertToVersion attempts to convert an input object to its matching Kind in another
+// version within this scheme. Will return an error if the provided version does not
+// contain the inKind (or a mapping by name defined with AddKnownTypeWithName). Will also
+// return an error if the conversion does not result in a valid Object being
+// returned. Passes target down to the conversion methods as the Context on the scope.
+func (s *Scheme) ConvertToVersion(in Object, target GroupVersioner) (Object, error) {
+	return s.convertToVersion(true, in, target)
+}
+
+// UnsafeConvertToVersion will convert in to the provided target if such a conversion is possible,
+// but does not guarantee the output object does not share fields with the input object. It attempts to be as
+// efficient as possible when doing conversion.
+func (s *Scheme) UnsafeConvertToVersion(in Object, target GroupVersioner) (Object, error) {
+	return s.convertToVersion(false, in, target)
+}
+
+// convertToVersion handles conversion with an optional copy.
+func (s *Scheme) convertToVersion(copy bool, in Object, target GroupVersioner) (Object, error) {
+	var t reflect.Type
+
+	if u, ok := in.(Unstructured); ok {
+		typed, err := s.unstructuredToTyped(u)
+		if err != nil {
+			return nil, err
+		}
+
+		in = typed
+		// unstructuredToTyped returns an Object, which must be a pointer to a struct.
+		t = reflect.TypeOf(in).Elem()
+
+	} else {
+		// determine the incoming kinds with as few allocations as possible.
+		t = reflect.TypeOf(in)
+		if t.Kind() != reflect.Ptr {
+			return nil, fmt.Errorf("only pointer types may be converted: %v", t)
+		}
+		t = t.Elem()
+		if t.Kind() != reflect.Struct {
+			return nil, fmt.Errorf("only pointers to struct types may be converted: %v", t)
+		}
+	}
+
+	kinds, ok := s.typeToGVK[t]
+	if !ok || len(kinds) == 0 {
+		return nil, NewNotRegisteredErrForType(t)
+	}
+
+	gvk, ok := target.KindForGroupVersionKinds(kinds)
+	if !ok {
+		// try to see if this type is listed as unversioned (for legacy support)
+		// TODO: when we move to server API versions, we should completely remove the unversioned concept
+		if unversionedKind, ok := s.unversionedTypes[t]; ok {
+			if gvk, ok := target.KindForGroupVersionKinds([]schema.GroupVersi
