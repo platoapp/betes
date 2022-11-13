@@ -534,4 +534,88 @@ func (s *Scheme) convertToVersion(copy bool, in Object, target GroupVersioner) (
 		// try to see if this type is listed as unversioned (for legacy support)
 		// TODO: when we move to server API versions, we should completely remove the unversioned concept
 		if unversionedKind, ok := s.unversionedTypes[t]; ok {
-			if gvk, ok := target.KindForGroupVersionKinds([]schema.GroupVersi
+			if gvk, ok := target.KindForGroupVersionKinds([]schema.GroupVersionKind{unversionedKind}); ok {
+				return copyAndSetTargetKind(copy, in, gvk)
+			}
+			return copyAndSetTargetKind(copy, in, unversionedKind)
+		}
+		return nil, NewNotRegisteredErrForTarget(t, target)
+	}
+
+	// target wants to use the existing type, set kind and return (no conversion necessary)
+	for _, kind := range kinds {
+		if gvk == kind {
+			return copyAndSetTargetKind(copy, in, gvk)
+		}
+	}
+
+	// type is unversioned, no conversion necessary
+	if unversionedKind, ok := s.unversionedTypes[t]; ok {
+		if gvk, ok := target.KindForGroupVersionKinds([]schema.GroupVersionKind{unversionedKind}); ok {
+			return copyAndSetTargetKind(copy, in, gvk)
+		}
+		return copyAndSetTargetKind(copy, in, unversionedKind)
+	}
+
+	out, err := s.New(gvk)
+	if err != nil {
+		return nil, err
+	}
+
+	if copy {
+		in = in.DeepCopyObject()
+	}
+
+	flags, meta := s.generateConvertMeta(in)
+	meta.Context = target
+	if err := s.converter.Convert(in, out, flags, meta); err != nil {
+		return nil, err
+	}
+
+	setTargetKind(out, gvk)
+	return out, nil
+}
+
+// unstructuredToTyped attempts to transform an unstructured object to a typed
+// object if possible. It will return an error if conversion is not possible, or the versioned
+// Go form of the object. Note that this conversion will lose fields.
+func (s *Scheme) unstructuredToTyped(in Unstructured) (Object, error) {
+	// the type must be something we recognize
+	gvks, _, err := s.ObjectKinds(in)
+	if err != nil {
+		return nil, err
+	}
+	typed, err := s.New(gvks[0])
+	if err != nil {
+		return nil, err
+	}
+	if err := DefaultUnstructuredConverter.FromUnstructured(in.UnstructuredContent(), typed); err != nil {
+		return nil, fmt.Errorf("unable to convert unstructured object to %v: %v", gvks[0], err)
+	}
+	return typed, nil
+}
+
+// generateConvertMeta constructs the meta value we pass to Convert.
+func (s *Scheme) generateConvertMeta(in interface{}) (conversion.FieldMatchingFlags, *conversion.Meta) {
+	return s.converter.DefaultMeta(reflect.TypeOf(in))
+}
+
+// copyAndSetTargetKind performs a conditional copy before returning the object, or an error if copy was not successful.
+func copyAndSetTargetKind(copy bool, obj Object, kind schema.GroupVersionKind) (Object, error) {
+	if copy {
+		obj = obj.DeepCopyObject()
+	}
+	setTargetKind(obj, kind)
+	return obj, nil
+}
+
+// setTargetKind sets the kind on an object, taking into account whether the target kind is the internal version.
+func setTargetKind(obj Object, kind schema.GroupVersionKind) {
+	if kind.Version == APIVersionInternal {
+		// internal is a special case
+		// TODO: look at removing the need to special case this
+		obj.GetObjectKind().SetGroupVersionKind(schema.GroupVersionKind{})
+		return
+	}
+	obj.GetObjectKind().SetGroupVersionKind(kind)
+}
