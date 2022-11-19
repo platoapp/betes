@@ -49,4 +49,12 @@ func (n NamespacedName) String() string {
 // This allows a single-value return from this function, while still allowing error checks in the caller.
 // Note that an input string which does not include exactly one Separator is not a valid input (as it could never
 // have neem returned by String() )
-func NewNamespacedNameFromStri
+func NewNamespacedNameFromString(s string) NamespacedName {
+	nn := NamespacedName{}
+	result := strings.Split(s, string(Separator))
+	if len(result) == 2 {
+		nn.Namespace = result[0]
+		nn.Name = result[1]
+	}
+	return nn
+}
