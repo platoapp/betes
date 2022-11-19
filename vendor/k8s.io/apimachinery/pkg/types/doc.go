@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Kubernetes Authors.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,20 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package selection
-
-// Operator represents a key/field's relationship to value(s).
-// See labels.Requirement and fields.Requirement for more details.
-type Operator string
-
-const (
-	DoesNotExist Operator = "!"
-	Equals       Operator = "="
-	DoubleEquals Operator = "=="
-	In           Operator = "in"
-	NotEquals    Operator = "!="
-	NotIn        Operator = "notin"
-	Exists       Operator = "exists"
-	GreaterThan  Operator = "gt"
-	LessThan     Operator = "lt"
-)
+// Package types implements various generic types used throughout kubernetes.
+package types // import "k8s.io/apimachinery/pkg/types"
