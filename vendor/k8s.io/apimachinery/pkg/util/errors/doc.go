@@ -14,9 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package types
-
-// UID is a type that holds unique ID values, including UUIDs.  Because we
-// don't ONLY use UUIDs, this is an alias to string.  Being a type captures
-// intent and helps make sure that UIDs and names do not get conflated.
-type UID string
+// Package errors implements various utility functions and types around errors.
+package errors // import "k8s.io/apimachinery/pkg/util/errors"
