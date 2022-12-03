@@ -59,4 +59,33 @@ func (p *Path) Index(index int) *Path {
 	return &Path{index: strconv.Itoa(index), parent: p}
 }
 
-// Key indicates th
+// Key indicates that the previous Path is to be subscripted by a string.
+// This sets the same underlying value as Index.
+func (p *Path) Key(key string) *Path {
+	return &Path{index: key, parent: p}
+}
+
+// String produces a string representation of the Path.
+func (p *Path) String() string {
+	// make a slice to iterate
+	elems := []*Path{}
+	for ; p != nil; p = p.parent {
+		elems = append(elems, p)
+	}
+
+	// iterate, but it has to be backwards
+	buf := bytes.NewBuffer(nil)
+	for i := range elems {
+		p := elems[len(elems)-1-i]
+		if p.parent != nil && len(p.name) > 0 {
+			// This is either the root or it is a subscript.
+			buf.WriteString(".")
+		}
+		if len(p.name) > 0 {
+			buf.WriteString(p.name)
+		} else {
+			fmt.Fprintf(buf, "[%s]", p.index)
+		}
+	}
+	return buf.String()
+}
