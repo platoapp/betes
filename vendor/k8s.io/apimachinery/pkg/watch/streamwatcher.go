@@ -90,3 +90,31 @@ func (sw *StreamWatcher) receive() {
 	defer close(sw.result)
 	defer sw.Stop()
 	defer utilruntime.HandleCrash()
+	for {
+		action, obj, err := sw.source.Decode()
+		if err != nil {
+			// Ignore expected error.
+			if sw.stopping() {
+				return
+			}
+			switch err {
+			case io.EOF:
+				// watch closed normally
+			case io.ErrUnexpectedEOF:
+				glog.V(1).Infof("Unexpected EOF during watch stream event decoding: %v", err)
+			default:
+				msg := "Unable to decode an event from the watch stream: %v"
+				if net.IsProbableEOF(err) {
+					glog.V(5).Infof(msg, err)
+				} else {
+					glog.Errorf(msg, err)
+				}
+			}
+			return
+		}
+		sw.result <- Event{
+			Type:   action,
+			Object: obj,
+		}
+	}
+}
