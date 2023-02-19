@@ -17,4 +17,6 @@ order or agree to the institution of patent litigation against any
 entity (including a cross-claim or counterclaim in a lawsuit) alleging
 that this implementation of Go or any code incorporated within this
 implementation of Go constitutes direct or contributory patent
-infringe
+infringement, or inducement of patent infringement, then any patent
+rights granted to you under this License for this implementation of Go
+shall terminate as of the date such litigation is filed.
